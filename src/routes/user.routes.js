@@ -1,54 +1,37 @@
 import express from "express";
-import { asyncHandler } from "../utils/asyncHandler.js";
-import { verifyJWT as isAuthenticated } from "../middlewares/auth.middleware.js";
 import {
-  registerUser,
-  loginUser,
-  logoutUser,
-  uploadUserData,
-  uploadUserPhoto,
-  getCurrentUser,
-  resetPassword,
-  refreshTokens,
-  sendOTP,
-  verifyOTPAndResetPassword,
+  registerUser, // Registers a new user (Public API) => POST /api/users/register
+  loginUser, // Logs in a user (Public API) => POST /api/users/login
+  logoutUser, // Logs out a user (Public API) => POST /api/users/logout
+  uploadUserData, // Updates user data (Protected API) => PUT /api/users/update/:userId
+  uploadUserPhoto, // Uploads user profile photo (Protected API) => POST /api/users/upload-photo/:userId
+  getCurrentUser, // Fetches current user details (Protected API) => GET /api/users/me
+  resetPassword, // Resets password using OTP (Public API) => POST /api/users/reset-password
+  sendOTP, // Sends OTP to user email (Public API) => POST /api/users/send-otp
+  refreshTokens, // Refreshes authentication tokens (Public API) => POST /api/users/refresh-tokens
 } from "../controllers/user.controllers.js";
-import { upload } from "../middlewares/multer.middleware.js";
+import { verifyJWT } from "../middlewares/auth.Middleware.js";
+import multer from "multer";
 
 const router = express.Router();
+const upload = multer({ dest: "uploads/" }); // Configure multer storage as needed
 
-// Register a new user
-router.post("/register", asyncHandler(registerUser));
+// Public Routes (No authentication required)
+router.post("/register", registerUser); // Register a new user
+router.post("/login", loginUser); // User login
+router.post("/logout", logoutUser); // User logout
+router.post("/send-otp", sendOTP); // Send OTP to email
+router.post("/reset-password", resetPassword); // Reset password via OTP
+router.post("/refresh-tokens", refreshTokens); // Refresh JWT tokens
 
-// Login user
-router.post("/login", asyncHandler(loginUser));
-
-// Logout user
-router.post("/logout", asyncHandler(logoutUser));
-
-// Get current logged-in user
-router.get("/me", isAuthenticated, asyncHandler(getCurrentUser));
-
-// Update user data
-router.put("/update/:userId", isAuthenticated, asyncHandler(uploadUserData));
-
-// Upload user profile photo
-// Upload user profile photo
-router.put(
+// Protected Routes (Require Authentication)
+router.get("/me", verifyJWT, getCurrentUser); // Fetch current logged-in user data
+router.put("/update/:userId", verifyJWT, uploadUserData); // Update user details
+router.post(
   "/upload-photo/:userId",
-  isAuthenticated,
-  upload.single("avatar"), // Add Multer middleware here
-  asyncHandler(uploadUserPhoto)
-);
-
-// Reset password
-router.post("/reset-password", asyncHandler(resetPassword));
-
-// Refresh tokens
-router.post("/refresh-tokens", asyncHandler(refreshTokens));
-
-router.post("/send-otp", asyncHandler(sendOTP)); // Send OTP
-router.post("/verify-otp", asyncHandler(verifyOTPAndResetPassword)); // Verify OTP & Reset Password
-router.post("/reset-password", asyncHandler(resetPassword)); // Reset with old password
+  verifyJWT,
+  upload.single("avatar"),
+  uploadUserPhoto
+); // Upload user profile photo
 
 export default router;

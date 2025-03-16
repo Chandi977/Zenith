@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 
 // Define the ambulance driver schema
 const ambulanceDriverSchema = new mongoose.Schema(
@@ -6,6 +7,17 @@ const ambulanceDriverSchema = new mongoose.Schema(
     driverName: {
       type: String,
       required: [true, "Driver name is required"],
+    },
+    email: {
+      type: String,
+      required: [true, "Email is required"],
+      unique: true,
+      match: [/^\S+@\S+\.\S+$/, "Please enter a valid email address"],
+    },
+    password: {
+      type: String,
+      required: [true, "Password is required"],
+      minlength: [6, "Password must be at least 6 characters long"],
     },
     contactNumber: {
       type: String,
@@ -30,8 +42,7 @@ const ambulanceDriverSchema = new mongoose.Schema(
     },
     govtIdProof: {
       type: String,
-      enum: ["AADHAR", "PAN", "Voter ID", "Passport", "Driving License"],
-      required: [true, "Government ID proof is required"],
+      required: true, // Keep required, but remove enum
     },
     govtIdNumber: {
       type: String,
@@ -55,6 +66,12 @@ const ambulanceDriverSchema = new mongoose.Schema(
       enum: ["Morning", "Afternoon", "Night"], // Define shifts for the driver
       required: [true, "Assigned shift is required"],
     },
+    otp: {
+      type: String,
+    },
+    otpExpires: {
+      type: Date,
+    },
     userRatings: {
       type: [Number], // Array of ratings given by users
       default: [],
@@ -72,8 +89,18 @@ ambulanceDriverSchema.virtual("averageRating").get(function () {
   return total / this.userRatings.length;
 });
 
-// Create an index for the contact number to ensure it's unique
-ambulanceDriverSchema.index({ contactNumber: 1 }, { unique: true });
+// Hash password before saving
+ambulanceDriverSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+// Method to compare password
+ambulanceDriverSchema.methods.matchPassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
 
 // Compile the model
 const AmbulanceDriver = mongoose.model(

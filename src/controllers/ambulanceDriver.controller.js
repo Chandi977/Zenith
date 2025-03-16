@@ -1,26 +1,93 @@
+import { validationResult } from "express-validator";
 import AmbulanceDriver from "../models/ambulanceDriver.model.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js"; // Ensure this is the correct import
+import bcrypt from "bcryptjs"; // Import bcrypt for password hashing
 
-// Create a new ambulance driver
 const createAmbulanceDriver = async (req, res) => {
   try {
+    // Validate request body
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
     const {
       driverName,
       contactNumber,
-      driverLicense,
       age,
       rating,
       drivingExperience,
-      govtIdProof,
       govtIdNumber,
-      driverPhoto,
       available,
       ambulance,
       assignedShift,
+      email, // Add email if needed
+      password, // Add password
     } = req.body;
 
+    if (
+      !driverName ||
+      !contactNumber ||
+      !age ||
+      !drivingExperience ||
+      !govtIdNumber ||
+      !ambulance ||
+      !assignedShift ||
+      !email ||
+      !password || // Ensure password is provided
+      available === undefined
+    ) {
+      return res
+        .status(400)
+        .json({ message: "All required fields must be filled" });
+    }
+
+    // 🔹 **Check if the driver already exists**
+    const existingDriver = await AmbulanceDriver.findOne({
+      $or: [
+        { contactNumber },
+        { govtIdNumber },
+        { email: email || null }, // Check email if provided
+      ],
+    });
+
+    if (existingDriver) {
+      return res.status(400).json({
+        message: "Driver already registered with the provided details.",
+      });
+    }
+
+    // 🔹 **Generate a Unique `userId`**
+    const userId = `DR${Date.now()}`; // Example format: DR1712774567890
+
+    // 🔹 **Hash the password for security**
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 🔹 **Check if all files exist**
+    const files = req.files;
+    if (!files?.driverLicense || !files?.govtIdProof || !files?.driverPhoto) {
+      return res
+        .status(400)
+        .json({ message: "All required documents must be uploaded" });
+    }
+
+    // 🔹 **Upload documents to Cloudinary**
+    const uploadPromises = [
+      uploadOnCloudinary(files.driverLicense[0].buffer, "driverLicense"),
+      uploadOnCloudinary(files.govtIdProof[0].buffer, "govtIdProof"),
+      uploadOnCloudinary(files.driverPhoto[0].buffer, "driverPhoto"),
+    ];
+
+    const [driverLicense, govtIdProof, driverPhoto] =
+      await Promise.all(uploadPromises);
+
+    // 🔹 **Create and Save New Driver**
     const newDriver = new AmbulanceDriver({
+      userId,
       driverName,
       contactNumber,
+      email, // Include email if required
+      password: hashedPassword, // Store hashed password
       driverLicense,
       age,
       rating,
@@ -34,15 +101,62 @@ const createAmbulanceDriver = async (req, res) => {
     });
 
     await newDriver.save();
-    res.status(201).json({
+
+    return res.status(201).json({
       message: "Ambulance driver created successfully",
-      driver: newDriver,
+      driver: {
+        userId,
+        driverName,
+        contactNumber,
+        email,
+        available,
+        ambulance,
+        assignedShift,
+      }, // Send only non-sensitive info
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("Driver Upload Error:", error);
+    return res.status(500).json({
       message: "Error creating ambulance driver",
       error: error.message,
     });
+  }
+};
+
+// Login function (without OTP)
+const loginAmbulanceDriver = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const driver = await AmbulanceDriver.findOne({ email });
+
+    if (!driver) {
+      return res.status(404).json({ message: "Driver not found" });
+    }
+
+    const isMatch = await bcrypt.compare(password, driver.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    // You can generate a JWT token here for authentication (optional)
+    // const token = jwt.sign({ userId: driver._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+
+    res.status(200).json({
+      message: "Login successful",
+      driver: {
+        userId: driver.userId,
+        driverName: driver.driverName,
+        contactNumber: driver.contactNumber,
+        email: driver.email,
+        available: driver.available,
+        ambulance: driver.ambulance,
+        assignedShift: driver.assignedShift,
+        // Include token if needed
+        // token,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
@@ -202,6 +316,7 @@ const addDriverRating = async (req, res) => {
 
 export {
   createAmbulanceDriver,
+  loginAmbulanceDriver,
   getAllAmbulanceDrivers,
   getAmbulanceDriverById,
   updateAmbulanceDriver,

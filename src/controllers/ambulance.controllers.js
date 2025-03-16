@@ -5,26 +5,67 @@ import Ambulance from "../models/ambulance.model.js";
 
 // Register a new ambulance
 const registerAmbulance = asyncHandler(async (req, res) => {
-  const requiredFields = [
-    "driverName",
-    "contactNumber",
-    "location",
-    "vehicleNumber",
-    "vehicleRegistrationNumber",
-    "pollutionDocument",
-    "insuranceData",
-    "vehicleModelNumber",
-    "fitnessCertificate",
-    "driverLicense",
-    "permitDocument",
-    "roadTaxReceipt",
-  ];
+  // Extract required fields directly from request body
+  console.log(req.body);
+  const {
+    driverName,
+    contactNumber,
+    location,
+    vehicleNumber,
+    vehicleRegistrationNumber,
+    pollutionDocument,
+    insuranceData,
+    vehicleModelNumber,
+    fitnessCertificate,
+    driverLicense,
+    permitDocument,
+    roadTaxReceipt,
+    otp,
+  } = req.body;
+  console.log(req.body);
 
-  for (const field of requiredFields) {
-    if (!req.body[field]) throw new ApiError(400, `${field} is required`);
+  // Check for missing fields
+  if (
+    !driverName ||
+    !contactNumber ||
+    !location ||
+    !vehicleNumber ||
+    !vehicleRegistrationNumber ||
+    !pollutionDocument ||
+    !insuranceData ||
+    !vehicleModelNumber ||
+    !fitnessCertificate ||
+    !driverLicense ||
+    !permitDocument ||
+    !roadTaxReceipt
+  ) {
+    throw new ApiError(400, "All fields are required");
   }
 
-  const ambulance = await Ambulance.create(req.body);
+  const existingUser = await User.findOne({ $or: [{ vehicleNumber }] });
+  if (existingUser) {
+    throw new ApiError(409, "User already exists");
+  }
+
+  // have to aggrigate ambulance driver with ambulance
+
+  // await verifyOTP(vehicleNumber, otp);
+  // Create ambulance entry in DB
+  const ambulance = await Ambulance.create({
+    driverName,
+    contactNumber,
+    location,
+    vehicleNumber,
+    vehicleRegistrationNumber,
+    pollutionDocument,
+    insuranceData,
+    vehicleModelNumber,
+    fitnessCertificate,
+    driverLicense,
+    permitDocument,
+    roadTaxReceipt,
+  });
+
   return res
     .status(201)
     .json(new ApiResponse(201, ambulance, "Ambulance registered successfully"));

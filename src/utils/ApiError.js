@@ -1,9 +1,9 @@
 class ApiError extends Error {
   constructor(
     statusCode, // HTTP status code for the error
-    message = 'Something went wrong', // Error message, default is 'Something went wrong'
+    message = "Something went wrong", // Error message, default is 'Something went wrong'
     errors = [], // Optional array of additional error details
-    stack = '' // Optional stack trace
+    stack = "" // Optional stack trace
   ) {
     super(message); // Call the parent class (Error) constructor with the message
 

@@ -25,9 +25,11 @@ app.use(express.static("public"));
 app.use(cookieParser());
 
 // Import routes
+import otpRoutes from "./routes/otp.routes.js";
 import userRouter from "./routes/user.routes.js";
 import healthcheckRouter from "./routes/healthcheck.routes.js";
 import ambulanceRouter from "./routes/ambulance.routes.js";
+import ambulanceDriver from "./routes/ambulanceDriver.routes.js";
 // import hospitalRouter from "./routes/hospital.routes.js";
 // import routeRouter from "./routes/route.routes.js";
 
@@ -35,7 +37,9 @@ import ambulanceRouter from "./routes/ambulance.routes.js";
 //routes declaration
 app.use("/api/v1/healthcheck", healthcheckRouter);
 app.use("/api/v1/users", userRouter);
+app.use("/api/v1/otp", otpRoutes);
 app.use("/api/v1/ambulance", ambulanceRouter);
+app.use("/api/v1/ambulanceDriver", ambulanceDriver);
 // app.use("/api/v1/hospital", hospitalRouter);
 // app.use("/api/v1/route", routeRouter);
 
