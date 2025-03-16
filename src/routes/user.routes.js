@@ -10,7 +10,7 @@ import {
   sendOTP, // Sends OTP to user email (Public API) => POST /api/users/send-otp
   refreshTokens, // Refreshes authentication tokens (Public API) => POST /api/users/refresh-tokens
 } from "../controllers/user.controllers.js";
-import { verifyJWT } from "../middlewares/auth.Middleware.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
 import multer from "multer";
 
 const router = express.Router();
