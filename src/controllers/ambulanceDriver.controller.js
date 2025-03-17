@@ -2,10 +2,11 @@ import { validationResult } from "express-validator";
 import AmbulanceDriver from "../models/ambulanceDriver.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js"; // Ensure this is the correct import
 import bcrypt from "bcryptjs"; // Import bcrypt for password hashing
+import jwt from "jsonwebtoken";
+import cron from "node-cron";
 
 const createAmbulanceDriver = async (req, res) => {
   try {
-    // Validate request body
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -21,8 +22,8 @@ const createAmbulanceDriver = async (req, res) => {
       available,
       ambulance,
       assignedShift,
-      email, // Add email if needed
-      password, // Add password
+      email,
+      password,
     } = req.body;
 
     if (
@@ -34,21 +35,17 @@ const createAmbulanceDriver = async (req, res) => {
       !ambulance ||
       !assignedShift ||
       !email ||
-      !password || // Ensure password is provided
+      !password ||
       available === undefined
     ) {
       return res
         .status(400)
         .json({ message: "All required fields must be filled" });
     }
+    console.log(password);
 
-    // 🔹 **Check if the driver already exists**
     const existingDriver = await AmbulanceDriver.findOne({
-      $or: [
-        { contactNumber },
-        { govtIdNumber },
-        { email: email || null }, // Check email if provided
-      ],
+      $or: [{ contactNumber }, { govtIdNumber }, { email }],
     });
 
     if (existingDriver) {
@@ -57,13 +54,9 @@ const createAmbulanceDriver = async (req, res) => {
       });
     }
 
-    // 🔹 **Generate a Unique `userId`**
-    const userId = `DR${Date.now()}`; // Example format: DR1712774567890
-
-    // 🔹 **Hash the password for security**
     const hashedPassword = await bcrypt.hash(password, 10);
+    console.log(hashedPassword);
 
-    // 🔹 **Check if all files exist**
     const files = req.files;
     if (!files?.driverLicense || !files?.govtIdProof || !files?.driverPhoto) {
       return res
@@ -71,7 +64,6 @@ const createAmbulanceDriver = async (req, res) => {
         .json({ message: "All required documents must be uploaded" });
     }
 
-    // 🔹 **Upload documents to Cloudinary**
     const uploadPromises = [
       uploadOnCloudinary(files.driverLicense[0].buffer, "driverLicense"),
       uploadOnCloudinary(files.govtIdProof[0].buffer, "govtIdProof"),
@@ -81,13 +73,12 @@ const createAmbulanceDriver = async (req, res) => {
     const [driverLicense, govtIdProof, driverPhoto] =
       await Promise.all(uploadPromises);
 
-    // 🔹 **Create and Save New Driver**
     const newDriver = new AmbulanceDriver({
-      userId,
+      userId: `DR${Date.now()}`,
       driverName,
       contactNumber,
-      email, // Include email if required
-      password: hashedPassword, // Store hashed password
+      email,
+      password: hashedPassword,
       driverLicense,
       age,
       rating,
@@ -105,14 +96,14 @@ const createAmbulanceDriver = async (req, res) => {
     return res.status(201).json({
       message: "Ambulance driver created successfully",
       driver: {
-        userId,
+        userId: newDriver.userId,
         driverName,
         contactNumber,
         email,
         available,
         ambulance,
         assignedShift,
-      }, // Send only non-sensitive info
+      },
     });
   } catch (error) {
     console.error("Driver Upload Error:", error);
@@ -133,13 +124,18 @@ const loginAmbulanceDriver = async (req, res) => {
       return res.status(404).json({ message: "Driver not found" });
     }
 
-    const isMatch = await bcrypt.compare(password, driver.password);
+    // Use the correct method name for password comparison
+    const isMatch = await driver.isPasswordCorrect(password); // Fix method name
+    console.log("Password comparison result: ", isMatch);
+
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // You can generate a JWT token here for authentication (optional)
-    // const token = jwt.sign({ userId: driver._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    // Generate JWT token for authentication
+    const token = jwt.sign({ userId: driver._id }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
 
     res.status(200).json({
       message: "Login successful",
@@ -151,11 +147,11 @@ const loginAmbulanceDriver = async (req, res) => {
         available: driver.available,
         ambulance: driver.ambulance,
         assignedShift: driver.assignedShift,
-        // Include token if needed
-        // token,
+        token, // Include token in response
       },
     });
   } catch (error) {
+    console.error("Error in login process: ", error); // Log any error for debugging
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
@@ -281,6 +277,48 @@ const updateDriverShift = async (req, res) => {
   }
 };
 
+const rotateDriverShifts = async () => {
+  try {
+    const drivers = await AmbulanceDriver.find(); // Fetch all drivers
+
+    for (const driver of drivers) {
+      // Normalize assignedShift capitalization (if it's incorrect in the DB)
+      driver.assignedShift =
+        driver.assignedShift.charAt(0).toUpperCase() +
+        driver.assignedShift.slice(1).toLowerCase();
+
+      // Rotate shifts
+      switch (driver.assignedShift) {
+        case "Morning":
+          driver.assignedShift = "Afternoon";
+          break;
+        case "Afternoon":
+          driver.assignedShift = "Night";
+          break;
+        case "Night":
+          driver.assignedShift = "Morning";
+          break;
+        default:
+          console.warn(
+            `⚠️ Invalid shift detected for driver ${driver._id}: ${driver.assignedShift}`
+          );
+          continue; // Skip saving if invalid
+      }
+
+      await driver.save(); // Save updated shift
+    }
+
+    console.log("✅ Driver shifts updated successfully!");
+  } catch (error) {
+    console.error("❌ Error rotating driver shifts:", error.message);
+  }
+};
+
+// Schedule this function to run every Sunday at midnight
+cron.schedule("0 0 * * 0", rotateDriverShifts, {
+  timezone: "Asia/Kolkata", // Adjust based on your region
+});
+
 // Add a rating to a driver
 const addDriverRating = async (req, res) => {
   try {
@@ -292,14 +330,21 @@ const addDriverRating = async (req, res) => {
     }
 
     const { rating } = req.body;
-    if (rating < 0 || rating > 5) {
+    if (typeof rating !== "number" || rating < 0 || rating > 5) {
       return res.status(400).json({
-        message: "Rating must be between 0 and 5",
+        message: "Rating must be a number between 0 and 5",
       });
     }
 
-    // Add the rating to the userRatings array
+    // Add the new rating to the userRatings array
     driver.userRatings.push(rating);
+
+    // Calculate the new average rating
+    const totalRatings = driver.userRatings.length;
+    const sumRatings = driver.userRatings.reduce((sum, r) => sum + r, 0);
+    driver.averageRating = (sumRatings / totalRatings).toFixed(1); // Round to 1 decimal place
+
+    // Save the updated driver data
     await driver.save();
 
     res.status(200).json({
@@ -323,4 +368,5 @@ export {
   deleteAmbulanceDriver,
   updateDriverShift,
   addDriverRating,
+  rotateDriverShifts,
 };

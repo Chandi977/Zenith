@@ -6,7 +6,7 @@ import Ambulance from "../models/ambulance.model.js";
 // Register a new ambulance
 const registerAmbulance = asyncHandler(async (req, res) => {
   // Extract required fields directly from request body
-  console.log(req.body);
+  // console.log(req.body);
   const {
     driverName,
     contactNumber,
@@ -22,7 +22,7 @@ const registerAmbulance = asyncHandler(async (req, res) => {
     roadTaxReceipt,
     otp,
   } = req.body;
-  console.log(req.body);
+  // console.log(req.body);
 
   // Check for missing fields
   if (

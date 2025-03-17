@@ -43,4 +43,7 @@ app.use("/api/v1/ambulanceDriver", ambulanceDriver);
 // app.use("/api/v1/hospital", hospitalRouter);
 // app.use("/api/v1/route", routeRouter);
 
+import { rotateDriverShifts } from "./controllers/ambulanceDriver.controller.js"; // Adjust path if needed
+rotateDriverShifts(); // Ensure it's triggered initially
+
 export { app }; // Export the Express app for use in other modules

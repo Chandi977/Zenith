@@ -1,108 +1,62 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
-// Define the ambulance driver schema
 const ambulanceDriverSchema = new mongoose.Schema(
   {
-    driverName: {
-      type: String,
-      required: [true, "Driver name is required"],
-    },
+    driverName: { type: String, required: true },
     email: {
       type: String,
-      required: [true, "Email is required"],
+      required: true,
       unique: true,
       match: [/^\S+@\S+\.\S+$/, "Please enter a valid email address"],
     },
-    password: {
-      type: String,
-      required: [true, "Password is required"],
-      minlength: [6, "Password must be at least 6 characters long"],
-    },
+    password: { type: String, required: true, minlength: 6 },
     contactNumber: {
       type: String,
-      required: [true, "Contact number is required"],
+      required: true,
       unique: true,
       match: [/^\d{10}$/, "Please enter a valid 10-digit contact number"],
     },
-    driverLicense: {
-      type: String,
-      required: [true, "Driver license is required"],
-    },
-    age: {
-      type: Number,
-      required: [true, "Age is required"],
-      min: [18, "Driver must be at least 18 years old"],
-    },
-    drivingExperience: {
-      type: Number,
-      required: [true, "Driving experience is required"],
-      min: [0, "Driving experience cannot be negative"],
-      max: [99, "Driving experience cannot exceed 99 years"],
-    },
-    govtIdProof: {
-      type: String,
-      required: true, // Keep required, but remove enum
-    },
-    govtIdNumber: {
-      type: String,
-      required: [true, "Government ID number is required"],
-    },
-    driverPhoto: {
-      type: String, // Store the URL of the photo
-      required: [true, "Driver photo is required"],
-    },
-    available: {
-      type: Boolean,
-      default: true, // Initially assume the driver is available
-    },
+    driverLicense: { type: String, required: true },
+    age: { type: Number, required: true, min: 18 },
+    drivingExperience: { type: Number, required: true, min: 0, max: 99 },
+    govtIdProof: { type: String, required: true },
+    govtIdNumber: { type: String, required: true },
+    driverPhoto: { type: String, required: true },
+    available: { type: Boolean, default: true }, // Initially available
     ambulance: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Ambulance",
-      required: [true, "Ambulance reference is required"],
+      default: null, // Assigned only when linked to an ambulance
     },
     assignedShift: {
       type: String,
-      enum: ["Morning", "Afternoon", "Night"], // Define shifts for the driver
-      required: [true, "Assigned shift is required"],
+      enum: ["Morning", "Afternoon", "Night"],
+      required: true,
     },
-    otp: {
-      type: String,
-    },
-    otpExpires: {
-      type: Date,
-    },
-    userRatings: {
-      type: [Number], // Array of ratings given by users
-      default: [],
-    },
+    userRatings: { type: [Number], default: [] },
   },
-  {
-    timestamps: true, // Automatically adds createdAt and updatedAt fields
-  }
+  { timestamps: true }
 );
 
-// Virtual to calculate average rating from userRatings array
 ambulanceDriverSchema.virtual("averageRating").get(function () {
-  if (this.userRatings.length === 0) return 0;
-  const total = this.userRatings.reduce((sum, rating) => sum + rating, 0);
-  return total / this.userRatings.length;
+  return this.userRatings.length === 0
+    ? 0
+    : this.userRatings.reduce((sum, rating) => sum + rating, 0) /
+        this.userRatings.length;
 });
 
-// Hash password before saving
 ambulanceDriverSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
+  if (!this.isModified("password")) return next(); // Proceed if password is not modified
+
+  // this.password = await bcrypt.hash(this.password, 10); // Hash the password with a salt rounds of 10
+  next(); // Proceed to the next middleware or save the document
 });
 
-// Method to compare password
-ambulanceDriverSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+ambulanceDriverSchema.methods.isPasswordCorrect = async function (password) {
+  return await bcrypt.compare(password, this.password); // Compare provided password with stored hashed password
 };
 
-// Compile the model
 const AmbulanceDriver = mongoose.model(
   "AmbulanceDriver",
   ambulanceDriverSchema
