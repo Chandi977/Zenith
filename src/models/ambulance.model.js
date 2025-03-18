@@ -1,64 +1,91 @@
 import mongoose from "mongoose";
-import AmbulanceDriver from "./ambulanceDriver.model.js";
 
 const ambulanceSchema = new mongoose.Schema(
   {
-    vehicleNumber: { type: String, required: true },
-    vehicleRegistrationNumber: { type: String, required: true },
-    model: { type: String },
-    status: {
+    vehicleNumber: {
       type: String,
-      enum: ["available", "assigned"],
-      default: "available",
+      required: true,
+      unique: true,
+      match: [
+        /^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/,
+        "Invalid vehicle number format",
+      ],
+    },
+    rcNumber: {
+      type: String,
+      required: true,
+      unique: true,
+      match: [/^[A-Z0-9]{10,15}$/, "Invalid RC number format"],
+    },
+    pollutionCertificateValidTill: {
+      type: Date,
+      required: true,
+    },
+    fitnessCertificateValidTill: {
+      type: Date,
+      required: true,
+    },
+    insuranceValidTill: {
+      type: Date,
+      required: true,
+    },
+    permitValidTill: {
+      type: Date,
+      required: true,
     },
     location: {
       type: { type: String, enum: ["Point"], default: "Point" },
       coordinates: { type: [Number], required: true },
     },
-    currentLocation: { type: String },
-    pollutionDocument: { type: String, required: true },
-    insuranceData: { type: String, required: true },
-    vehicleModelNumber: { type: String, required: true },
-    fitnessCertificate: { type: String, required: true },
-    driverLicense: { type: String, required: true },
-    permitDocument: { type: String, required: true },
-    roadTaxReceipt: { type: String, required: true },
-    currentDriver: {
+    driver: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "AmbulanceDriver",
+      ref: "AmbulanceDriver", // Automatically assigned
       default: null,
     },
-    hospital: { type: mongoose.Schema.Types.ObjectId, ref: "Hospital" },
-    available: { type: Boolean, default: true },
+    ambulanceType: {
+      type: String,
+      enum: ["Basic", "Advanced", "ICU", "Neonatal"],
+      required: true,
+    },
+    oxygenCylinderAvailable: {
+      type: Boolean,
+      default: false,
+    },
+    ventilatorAvailable: {
+      type: Boolean,
+      default: false,
+    },
+    stretcherAvailable: {
+      type: Boolean,
+      default: true,
+    },
+    status: {
+      type: String,
+      enum: ["Available", "On Duty", "Under Maintenance"],
+      default: "Available",
+    },
+    serviceStartDate: {
+      type: Date,
+      required: true,
+    },
+    lastServiceDate: {
+      type: Date,
+      required: true,
+    },
+    emergencyContact: {
+      type: String,
+      required: true,
+      match: [
+        /^\d{10}$/,
+        "Please enter a valid 10-digit emergency contact number",
+      ],
+    },
   },
   { timestamps: true }
 );
 
+// Geospatial Index for efficient location querying
 ambulanceSchema.index({ location: "2dsphere" });
-
-// Middleware to automatically assign an available driver
-ambulanceSchema.pre("save", async function (next) {
-  if (!this.currentDriver) {
-    try {
-      // Find an available driver who has no ambulance assigned
-      const driver = await AmbulanceDriver.findOneAndUpdate(
-        { available: true },
-        { available: false },
-        { new: true }
-      );
-
-      if (driver) {
-        this.currentDriver = driver._id;
-        await AmbulanceDriver.findByIdAndUpdate(driver._id, {
-          ambulance: this._id,
-        });
-      }
-    } catch (error) {
-      console.error("Error assigning driver:", error);
-    }
-  }
-  next();
-});
 
 const Ambulance = mongoose.model("Ambulance", ambulanceSchema);
 

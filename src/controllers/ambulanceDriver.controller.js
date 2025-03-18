@@ -20,30 +20,36 @@ const createAmbulanceDriver = async (req, res) => {
       drivingExperience,
       govtIdNumber,
       available,
-      ambulance,
       assignedShift,
       email,
       password,
     } = req.body;
 
-    if (
-      !driverName ||
-      !contactNumber ||
-      !age ||
-      !drivingExperience ||
-      !govtIdNumber ||
-      !ambulance ||
-      !assignedShift ||
-      !email ||
-      !password ||
-      available === undefined
-    ) {
+    // Check required fields dynamically
+    const requiredFields = [
+      "driverName",
+      "contactNumber",
+      "age",
+      "drivingExperience",
+      "govtIdNumber",
+      "assignedShift",
+      "email",
+      "password",
+    ];
+
+    for (const field of requiredFields) {
+      if (!req.body[field]) {
+        return res.status(400).json({ message: `${field} is required` });
+      }
+    }
+
+    if (available == null) {
       return res
         .status(400)
-        .json({ message: "All required fields must be filled" });
+        .json({ message: "Availability status is required" });
     }
-    console.log(password);
 
+    // Check if driver already exists
     const existingDriver = await AmbulanceDriver.findOne({
       $or: [{ contactNumber }, { govtIdNumber }, { email }],
     });
@@ -54,8 +60,8 @@ const createAmbulanceDriver = async (req, res) => {
       });
     }
 
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-    console.log(hashedPassword);
 
     const files = req.files;
     if (!files?.driverLicense || !files?.govtIdProof || !files?.driverPhoto) {
@@ -64,6 +70,7 @@ const createAmbulanceDriver = async (req, res) => {
         .json({ message: "All required documents must be uploaded" });
     }
 
+    // Upload documents to Cloudinary
     const uploadPromises = [
       uploadOnCloudinary(files.driverLicense[0].buffer, "driverLicense"),
       uploadOnCloudinary(files.govtIdProof[0].buffer, "govtIdProof"),
@@ -73,6 +80,7 @@ const createAmbulanceDriver = async (req, res) => {
     const [driverLicense, govtIdProof, driverPhoto] =
       await Promise.all(uploadPromises);
 
+    // Create new driver instance
     const newDriver = new AmbulanceDriver({
       userId: `DR${Date.now()}`,
       driverName,
@@ -87,7 +95,6 @@ const createAmbulanceDriver = async (req, res) => {
       govtIdNumber,
       driverPhoto,
       available,
-      ambulance,
       assignedShift,
     });
 
@@ -101,12 +108,11 @@ const createAmbulanceDriver = async (req, res) => {
         contactNumber,
         email,
         available,
-        ambulance,
         assignedShift,
       },
     });
   } catch (error) {
-    console.error("Driver Upload Error:", error);
+    console.error("Driver Upload Error:", error.stack);
     return res.status(500).json({
       message: "Error creating ambulance driver",
       error: error.message,
