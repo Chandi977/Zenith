@@ -1,4 +1,4 @@
-import { getDirections, findNearestHospital } from "../utils/googleMaps.js";
+import { getDirections } from "../utils/googleMaps.js";
 import Route from "../models/route.model.js";
 
 const getRoutes = (req, res) => {
@@ -16,7 +16,7 @@ const calculateDistance = (location1, location2) => {
   const lon2 = toRadians(location2.longitude);
 
   const dLat = lat2 - lat1;
-  const dLon = lon2 - lon1; // Fixed variable name
+  const dLon = dLon - lon1; // Fixed variable name
 
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -51,26 +51,16 @@ const generatePathData = async (assignedDriver, location) => {
     location
   );
 
-  let nearestHospital;
-  try {
-    nearestHospital = await findNearestHospital(location);
-  } catch (error) {
-    console.error(
-      `Error finding nearest hospital for SOS request at location: (${location.latitude}, ${location.longitude})`,
-      error.message
-    );
-    throw new ApiError(404, "No nearby hospitals found for the SOS request");
-  }
-
+  // Removed nearestHospital logic
   const patientToHospital = await getDirections(location, {
-    latitude: nearestHospital.location.lat,
-    longitude: nearestHospital.location.lng,
+    latitude: 0, // Placeholder latitude
+    longitude: 0, // Placeholder longitude
   });
 
   // Save route data to MongoDB
   const route = new Route({
     startPoint: location,
-    endPoint: nearestHospital.location,
+    endPoint: { latitude: 0, longitude: 0 }, // Placeholder endPoint
     waypoints: patientToHospital.legs[0].steps.map((step) => ({
       latitude: step.start_location.lat,
       longitude: step.start_location.lng,
@@ -83,7 +73,7 @@ const generatePathData = async (assignedDriver, location) => {
   return {
     ambulanceToPatient,
     patientToHospital,
-    nearestHospital,
+    nearestHospital: { location: { lat: 0, lng: 0 } }, // Placeholder nearestHospital
   };
 };
 

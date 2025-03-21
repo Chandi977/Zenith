@@ -10,6 +10,7 @@ import { rotateDriverShifts } from "./controllers/ambulanceDriver.controller.js"
 import cluster from "cluster";
 import os from "os";
 import admin from "firebase-admin"; // Firebase Admin SDK
+import events from "events"; // Ensure this import exists
 
 // Load environment variables
 dotenv.config({
@@ -24,6 +25,9 @@ if (!admin.apps.length) {
 } else {
   admin.app(); // Use the already initialized app
 }
+
+// Increase the maximum number of event listeners
+events.EventEmitter.defaultMaxListeners = 20;
 
 // Function to send Firebase notifications
 const sendFirebaseNotification = async (token, payload) => {
