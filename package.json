@@ -40,7 +40,9 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^6.10.0",
     "otp-generator": "^4.0.1",
+    "polyline": "^0.2.0",
     "priorityqueuejs": "^2.0.0",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "firebase-admin": "^11.10.1"
   }
 }

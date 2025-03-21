@@ -1,10 +1,10 @@
-# User Controller API
+# User Controller API Documentation
 
-This document provides detailed information on the User Controller API, specifically designed for Android UI developers integrating user authentication and profile management features.
-
-## Synopsis
+## Overview
 
 The User Controller API provides endpoints for user registration, authentication, profile management, and security features such as OTP verification and token refresh. It is designed to work seamlessly with Android applications using Retrofit for API calls.
+
+---
 
 ## Base URL
 
@@ -12,24 +12,26 @@ The User Controller API provides endpoints for user registration, authentication
 https://zenith-oy4b.onrender.com/api/v1/
 ```
 
-## Data Flow Diagram (DFD)
+---
 
-### Level 1 DFD:
+## Features
 
-- User interacts with the Android application.
-- The application sends HTTP requests to the backend API.
-- Backend processes the request and interacts with the database.
-- Response is sent back to the application for further action.
+- **User Registration**: Allows new users to register with OTP verification.
+- **Authentication**: Provides secure login and logout functionality.
+- **Profile Management**: Enables users to update their profile details and upload profile photos.
+- **Token Management**: Supports access token refresh for seamless authentication.
+- **SOS Requests**: Allows users to send emergency SOS requests.
+
+---
 
 ## Endpoints
 
 ### 1. Register User
 
-**Endpoint:** `POST /register`
+**Endpoint:** `POST /register`  
+**Description:** Registers a new user with OTP verification.
 
-**Description:** Registers a new user.
-
-**Request Body (JSON):**
+**Request Body:**
 
 ```json
 {
@@ -57,11 +59,10 @@ https://zenith-oy4b.onrender.com/api/v1/
 
 ### 2. Login User
 
-**Endpoint:** `POST /login`
-
+**Endpoint:** `POST /login`  
 **Description:** Authenticates the user and returns access tokens.
 
-**Request Body (JSON):**
+**Request Body:**
 
 ```json
 {
@@ -88,11 +89,10 @@ https://zenith-oy4b.onrender.com/api/v1/
 
 ### 3. Reset Password
 
-**Endpoint:** `POST /reset-password`
-
+**Endpoint:** `POST /reset-password`  
 **Description:** Resets the user password using OTP verification.
 
-**Request Body (JSON):**
+**Request Body:**
 
 ```json
 {
@@ -115,11 +115,10 @@ https://zenith-oy4b.onrender.com/api/v1/
 
 ### 4. Upload User Data
 
-**Endpoint:** `PUT /update/:userId`
-
+**Endpoint:** `PUT /update/:userId`  
 **Description:** Updates user profile details.
 
-**Request Body (JSON):**
+**Request Body:**
 
 ```json
 {
@@ -141,8 +140,7 @@ https://zenith-oy4b.onrender.com/api/v1/
 
 ### 5. Upload User Photo
 
-**Endpoint:** `POST /upload-photo/:userId`
-
+**Endpoint:** `POST /upload-photo/:userId`  
 **Description:** Uploads a profile picture for the user using Cloudinary.
 
 **Request Format:** `multipart/form-data`
@@ -212,8 +210,7 @@ export { uploadOnCloudinary, removeFromCloudinary };
 
 ### 6. Get Current User
 
-**Endpoint:** `GET /me`
-
+**Endpoint:** `GET /me`  
 **Description:** Fetches the authenticated user’s profile.
 
 **Response:**
@@ -234,8 +231,7 @@ export { uploadOnCloudinary, removeFromCloudinary };
 
 ### 7. Logout User
 
-**Endpoint:** `POST /logout`
-
+**Endpoint:** `POST /logout`  
 **Description:** Logs out the user by clearing authentication tokens.
 
 **Response:**
@@ -251,8 +247,7 @@ export { uploadOnCloudinary, removeFromCloudinary };
 
 ### 8. Refresh Tokens
 
-**Endpoint:** `POST /refresh-tokens`
-
+**Endpoint:** `POST /refresh-tokens`  
 **Description:** Refreshes the access and refresh tokens.
 
 **Response:**
@@ -268,6 +263,8 @@ export { uploadOnCloudinary, removeFromCloudinary };
 }
 ```
 
+---
+
 ## Authentication & Headers
 
 - **Authorization:** All protected routes require a Bearer Token in the `Authorization` header:
@@ -278,6 +275,8 @@ export { uploadOnCloudinary, removeFromCloudinary };
   ```
   application/json
   ```
+
+---
 
 ## Error Handling
 
@@ -290,6 +289,8 @@ Errors are returned in the following format:
 }
 ```
 
+---
+
 ## Notes for Android UI Developers
 
 - Use `Retrofit` for API calls.
@@ -299,3 +300,42 @@ Errors are returned in the following format:
 - Handle token expiration by implementing auto-refresh with `refresh-tokens` API.
 
 For further assistance, refer to the API documentation or contact the backend team.
+
+# Firebase Notification Integration
+
+## Overview
+
+Zenith now supports real-time notifications using Firebase Cloud Messaging (FCM). This feature enables Android devices to receive alerts for SOS requests, route updates, and other critical events.
+
+## Firebase Notification API
+
+### 1. Send Notification
+
+**Endpoint:** WebSocket Event: `sendNotification`
+
+**Description:** Sends a notification to an Android device using Firebase.
+
+**Payload:**
+
+```json
+{
+  "token": "device_fcm_token",
+  "payload": {
+    "notification": {
+      "title": "Emergency Alert",
+      "body": "An ambulance is on its way to your location."
+    },
+    "data": {
+      "type": "SOS",
+      "location": "28.7041, 77.1025"
+    }
+  }
+}
+```
+
+**Response:** Acknowledgment of notification delivery.
+
+### Notes
+
+- Ensure the Android app is configured with the correct Firebase project.
+- Use the `sendNotification` WebSocket event to trigger notifications.

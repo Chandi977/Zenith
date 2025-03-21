@@ -11,6 +11,11 @@ const ambulanceSchema = new mongoose.Schema(
         "Invalid vehicle number format",
       ],
     },
+    hospitalId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Hospital", // Reference to the hospital owning the ambulance
+      required: true,
+    },
     rcNumber: {
       type: String,
       required: true,
@@ -33,13 +38,17 @@ const ambulanceSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
-    location: {
-      type: { type: String, enum: ["Point"], default: "Point" },
-      coordinates: { type: [Number], required: true },
+    latitude: {
+      type: Number,
+      required: true,
+    },
+    longitude: {
+      type: Number,
+      required: true,
     },
     driver: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "AmbulanceDriver", // Automatically assigned
+      ref: "AmbulanceDriver", // Reference to the assigned driver
       default: null,
     },
     ambulanceType: {
@@ -83,9 +92,6 @@ const ambulanceSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
-// Geospatial Index for efficient location querying
-ambulanceSchema.index({ location: "2dsphere" });
 
 const Ambulance = mongoose.model("Ambulance", ambulanceSchema);
 

@@ -9,8 +9,22 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import OTP from "../models/otp.model.js";
-import { sendOTP } from "./otp.controller.js";
+import {
+  sendOTP,
+  verifyOTP,
+  verifyOTPProgrammatically,
+} from "./otp.controller.js"; // Import verifyOTPProgrammatically
 import bcrypt from "bcryptjs";
+import SOS from "../models/sos.model.js";
+import { sendNotification } from "../utils/sendNotification.js";
+import { findDriversInRange } from "./ambulanceDriver.controller.js";
+import { assignDriverAndNotify } from "./ambulance.controllers.js";
+import {
+  findNearestHospital,
+  calculateETA,
+  calculateDistance,
+  generateMapLink, // Import the function
+} from "../utils/googleMaps.js"; // Add calculateDistance to the import
 
 const registerUser = asyncHandler(async (req, res) => {
   const { fullName, email, username, password, address, mobileNumber, otp } =
@@ -28,8 +42,8 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(409, "User already exists");
   }
 
-  // ✅ Reuse OTP verification function
-  await verifyOTP(email, otp);
+  // Use the helper function to verify OTP
+  await verifyOTPProgrammatically(email, otp);
 
   const user = await User.create({
     fullName,
@@ -62,8 +76,8 @@ const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid credentials");
   }
 
-  // ✅ Reuse OTP verification function
-  await verifyOTP(email || user.email, otp);
+  // Use the helper function to verify OTP
+  await verifyOTPProgrammatically(email || user.email, otp);
 
   const { accessToken, refreshToken } =
     await generateAccessAndRefreshTokens(user);
@@ -82,15 +96,15 @@ const resetPassword = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Email, new password, and OTP are required");
   }
 
-  // ✅ Reuse OTP verification function
-  await verifyOTP(email, otp);
+  // Use the helper function to verify OTP
+  await verifyOTPProgrammatically(email, otp);
 
   const user = await User.findOne({ email });
   if (!user) {
     throw new ApiError(404, "User not found");
   }
 
-  // ✅ Hash the new password before saving
+  // Hash the new password before saving
   const salt = await bcrypt.genSalt(10);
   user.password = await bcrypt.hash(newPassword, salt);
   await user.save();
@@ -99,19 +113,6 @@ const resetPassword = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, {}, "Password reset successfully"));
 });
-
-const verifyOTP = async (email, otp) => {
-  const validOTP = await OTP.findOne({
-    email,
-    expiresAt: { $gt: new Date() }, // Ensure OTP is not expired
-  });
-
-  if (!validOTP || !(await bcrypt.compare(otp, validOTP.otp))) {
-    throw new ApiError(400, "Invalid or expired OTP");
-  }
-
-  await OTP.deleteOne({ _id: validOTP._id }); // ✅ Remove OTP after verification
-};
 
 const logoutUser = asyncHandler(async (req, res) => {
   res.clearCookie("accessToken");
@@ -142,26 +143,24 @@ const uploadUserData = asyncHandler(async (req, res) => {
 const uploadUserPhoto = asyncHandler(async (req, res) => {
   const { userId } = req.params;
 
-  //   console.log("Received File:", req.file); // Debugging
-
-  // Fix: Access req.file directly (Multer's `single` method does not use `req.files`)
-  const avatarLocalPath = req.file?.path;
-
-  if (!avatarLocalPath) {
+  // Check if a file was uploaded
+  if (!req.file) {
     throw new ApiError(400, "No image provided");
   }
+
+  const avatarBuffer = req.file.buffer; // Access the file buffer directly
 
   const user = await User.findById(userId);
   if (!user) {
     throw new ApiError(404, "User not found");
   }
 
-  const avatar = await uploadOnCloudinary(avatarLocalPath);
+  const avatar = await uploadOnCloudinary(avatarBuffer, "avatars"); // Upload to Cloudinary
   if (!avatar) {
     throw new ApiError(500, "Error uploading avatar");
   }
 
-  user.avatar = avatar.url;
+  user.avatar = avatar; // Save the uploaded avatar URL
   await user.save();
 
   return res
@@ -225,6 +224,98 @@ const generateAccessAndRefreshTokens = async (user) => {
   }
 };
 
+const sendSOSRequest = asyncHandler(async (req, res) => {
+  const { userId, selectedLocation } = req.body;
+
+  if (!userId) {
+    throw new ApiError(400, "User ID is required");
+  }
+
+  const currentLocation = req.body.currentLocation;
+
+  if (!currentLocation && !selectedLocation) {
+    throw new ApiError(
+      400,
+      "Either current location or selected location is required"
+    );
+  }
+
+  const location = selectedLocation || currentLocation;
+
+  if (!location.latitude || !location.longitude) {
+    throw new ApiError(400, "Valid location (latitude, longitude) is required");
+  }
+
+  const reachableRange = 10; // Initial range in km
+  const maxRange = 50; // Maximum range in km
+  let driversInRange = [];
+
+  while (reachableRange <= maxRange) {
+    driversInRange = await findDriversInRange(location, reachableRange);
+
+    if (driversInRange.length > 0) break;
+
+    reachableRange += 10; // Increase range by 10 km
+  }
+
+  if (driversInRange.length === 0) {
+    return res
+      .status(404)
+      .json(
+        new ApiResponse(
+          404,
+          {},
+          "No ambulance drivers available within the reachable range"
+        )
+      );
+  }
+
+  const { sosRequest, assignedDriver } = await assignDriverAndNotify(
+    userId,
+    location,
+    driversInRange
+  );
+
+  // Fetch the nearest hospital
+  const hospital = await findNearestHospital(location);
+
+  if (!hospital) {
+    throw new ApiError(404, "No nearby hospital found.");
+  }
+
+  // Use a default speed if assignedDriver.speed is invalid
+  const driverSpeed = assignedDriver.speed > 0 ? assignedDriver.speed : 40; // Default speed: 40 km/h
+
+  // Validate startLocation before generating the map link
+  const startLocation = {
+    latitude: assignedDriver.latitude || 0,
+    longitude: assignedDriver.longitude || 0,
+  };
+
+  if (!startLocation.latitude || !startLocation.longitude) {
+    throw new ApiError(400, "Invalid startLocation for map link generation.");
+  }
+
+  // Prepare notification details
+  const notification = {
+    type: "AMBULANCE_ON_THE_WAY",
+    hospitalName: hospital.name,
+    ambulanceDetails: {
+      expectedTime: calculateETA(location, hospital.location, driverSpeed),
+      distance: calculateDistance(location, hospital.location),
+      speed: driverSpeed,
+      mapLink: generateMapLink(startLocation, hospital.location), // Ensure hospital.location uses latitude/longitude
+    },
+  };
+
+  // Send notification to the user
+  await sendNotification(userId, notification);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, sosRequest, "SOS request sent successfully"));
+});
+
 export {
   registerUser,
   loginUser,
@@ -235,4 +326,6 @@ export {
   resetPassword,
   sendOTP,
   refreshTokens,
+  sendSOSRequest, // Use sendSOSRequest for SOS functionality
+  verifyOTP,
 };

@@ -37,7 +37,7 @@ const sendOTP = asyncHandler(async (req, res) => {
     userType === "user"
       ? await User.findOne({ email: normalizedEmail })
       : userType === "ambulance"
-        ? await Ambulance.findOne({ email: normalizedEmail })
+        ? await Driver.findOne({ email: normalizedEmail }) // Fetch from ambulanceDriver
         : await Driver.findOne({ email: normalizedEmail });
 
   if (otpPurpose !== "register" && !existingUser) {
@@ -123,5 +123,41 @@ const sendOTP = asyncHandler(async (req, res) => {
  * @route POST /api/otp/verify
  * @access Public
  */
+const verifyOTP = asyncHandler(async (req, res) => {
+  const { email, otp } = req.body;
 
-export { sendOTP };
+  if (!email || !otp) {
+    throw new ApiError(400, "Email and OTP are required");
+  }
+
+  const otpRecord = await OTP.findOne({ email });
+  if (!otpRecord) {
+    throw new ApiError(400, "OTP not found or expired");
+  }
+
+  const isMatch = await bcrypt.compare(otp, otpRecord.otp);
+  if (!isMatch) {
+    throw new ApiError(400, "Invalid OTP");
+  }
+
+  if (otpRecord.expiresAt < new Date()) {
+    await OTP.deleteOne({ email }); // Clean up expired OTP
+    throw new ApiError(400, "OTP has expired");
+  }
+
+  await OTP.deleteOne({ email }); // Delete OTP after successful verification
+
+  // If called programmatically, return success
+  if (!res) return true;
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "OTP verified successfully"));
+});
+
+// Helper function for programmatic OTP verification
+const verifyOTPProgrammatically = async (email, otp) => {
+  return verifyOTP({ body: { email, otp } });
+};
+
+export { sendOTP, verifyOTP, verifyOTPProgrammatically };

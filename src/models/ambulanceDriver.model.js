@@ -26,15 +26,31 @@ const ambulanceDriverSchema = new mongoose.Schema(
     available: { type: Boolean, default: true }, // Initially available
     ambulance: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Ambulance",
+      ref: "Ambulance", // Reference to the assigned ambulance
       default: null, // Assigned only when linked to an ambulance
+    },
+    hospital: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Hospital", // Reference to the associated hospital
+      required: true, // Hospital is mandatory for registration
     },
     assignedShift: {
       type: String,
-      enum: ["Morning", "Afternoon", "Night"],
+      enum: ["Morning", "Afternoon", "Night", "SOS"], // Added "SOS" as a valid enum value
       required: true,
     },
-    userRatings: { type: [Number], default: [] },
+    userRatings: [
+      {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        rating: { type: Number, required: true, min: 0, max: 5 },
+      },
+    ],
+    latitude: { type: Number, required: true },
+    longitude: { type: Number, required: true },
   },
   { timestamps: true }
 );
@@ -42,14 +58,14 @@ const ambulanceDriverSchema = new mongoose.Schema(
 ambulanceDriverSchema.virtual("averageRating").get(function () {
   return this.userRatings.length === 0
     ? 0
-    : this.userRatings.reduce((sum, rating) => sum + rating, 0) /
+    : this.userRatings.reduce((sum, rating) => sum + rating.rating, 0) /
         this.userRatings.length;
 });
 
 ambulanceDriverSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next(); // Proceed if password is not modified
 
-  // this.password = await bcrypt.hash(this.password, 10); // Hash the password with a salt rounds of 10
+  this.password = await bcrypt.hash(this.password, 10); // Hash the password with a salt rounds of 10
   next(); // Proceed to the next middleware or save the document
 });
 

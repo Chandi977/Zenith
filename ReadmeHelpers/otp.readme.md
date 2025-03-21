@@ -4,6 +4,8 @@
 
 The OTP Service is responsible for generating, sending, and verifying One-Time Passwords (OTPs) for various authentication processes such as registration, login, and password reset. It supports different user types, including Users, Ambulance Service Providers, and Drivers.
 
+---
+
 ## Features
 
 - **OTP Generation**: Securely generates a 6-digit OTP.
@@ -13,14 +15,14 @@ The OTP Service is responsible for generating, sending, and verifying One-Time P
 - **Multi-Purpose Support**: OTPs can be used for registration, login, and password reset.
 - **User Type Handling**: Supports Users, Ambulance Providers, and Drivers.
 
+---
+
 ## API Endpoints
 
 ### 1. Send OTP
 
-**Endpoint:** `POST /api/otp/send`
-
-**Description:**
-Sends an OTP to the user’s email for authentication.
+**Endpoint:** `POST /api/otp/send`  
+**Description:** Sends an OTP to the user’s email for authentication.
 
 **Request Body:**
 
@@ -51,10 +53,8 @@ Sends an OTP to the user’s email for authentication.
 
 ### 2. Verify OTP
 
-**Endpoint:** `POST /api/otp/verify`
-
-**Description:**
-Verifies an OTP entered by the user.
+**Endpoint:** `POST /api/otp/verify`  
+**Description:** Verifies an OTP entered by the user.
 
 **Request Body:**
 
@@ -80,10 +80,14 @@ Verifies an OTP entered by the user.
 - `401 Unauthorized`: OTP expired or incorrect.
 - `500 Internal Server Error`: Database error.
 
+---
+
 ## OTP Expiry Policy
 
 - OTPs are **valid for 5 minutes**.
 - Expired OTPs are automatically deleted from the database.
+
+---
 
 ## Database Schema
 
@@ -95,16 +99,22 @@ Verifies an OTP entered by the user.
 | otp       | String | Yes      | Encrypted OTP value   |
 | expiresAt | Date   | Yes      | Expiry timestamp      |
 
+---
+
 ## Email Format
 
 - **Subject:** Based on `otpPurpose` (e.g., "Zenith User Registration OTP").
 - **Body:** Contains OTP and expiry details.
+
+---
 
 ## Security Measures
 
 - **Hashing:** OTPs are hashed before storage to prevent leaks.
 - **Limited Validity:** OTPs expire in 5 minutes.
 - **Email-Based Authentication:** Ensures OTPs are sent to verified users.
+
+---
 
 ## Dependencies
 
@@ -114,12 +124,16 @@ Verifies an OTP entered by the user.
 - `nodemailer`
 - `mongoose`
 
+---
+
 ## Usage Guidelines
 
 1. **Ensure the `.env` file is configured** with email credentials.
 2. **Integrate the API endpoints** into your authentication flow.
 3. **Handle OTP expiration** on the frontend.
 4. **Do not expose OTPs** in logs or responses.
+
+---
 
 ## Future Enhancements
 

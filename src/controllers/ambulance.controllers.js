@@ -1,5 +1,8 @@
 import Ambulance from "../models/ambulance.model.js";
 import AmbulanceDriver from "../models/ambulanceDriver.model.js";
+import SOS from "../models/sos.model.js";
+import { sendNotification } from "../utils/sendNotification.js";
+import { calculateDistance, findNearestHospital } from "../utils/googleMaps.js";
 
 const registerAmbulance = async (req, res) => {
   try {
@@ -39,8 +42,8 @@ const registerAmbulance = async (req, res) => {
     const ambulance = new Ambulance({
       vehicleNumber,
       rcNumber,
-      location: { type: "Point", coordinates: [longitude, latitude] },
-      driver: driver._id,
+      latitude,
+      longitude,
       ambulanceType,
       pollutionCertificateValidTill,
       fitnessCertificateValidTill,
@@ -82,28 +85,18 @@ const getNearestAmbulances = async (req, res) => {
         .json({ message: "Latitude and Longitude are required." });
     }
 
-    const nearestAmbulances = await Ambulance.aggregate([
-      {
-        $geoNear: {
-          near: {
-            type: "Point",
-            coordinates: [parseFloat(longitude), parseFloat(latitude)],
-          },
-          distanceField: "distance",
-          maxDistance: 5000, // Adjust max search radius (in meters)
-          spherical: true,
-          key: "location", // Make sure 'location' is indexed as 2dsphere in your schema
-        },
-      },
-    ]);
+    const ambulances = await Ambulance.find({
+      latitude: { $gte: latitude - 0.05, $lte: latitude + 0.05 },
+      longitude: { $gte: longitude - 0.05, $lte: longitude + 0.05 },
+    });
 
-    if (nearestAmbulances.length === 0) {
+    if (ambulances.length === 0) {
       return res
         .status(404)
         .json({ message: "No available ambulances nearby." });
     }
 
-    res.status(200).json(nearestAmbulances);
+    res.status(200).json(ambulances);
   } catch (error) {
     console.error("Error finding nearest ambulances:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -114,13 +107,17 @@ const getLiveAmbulanceLocation = async (req, res) => {
   try {
     const { ambulanceId } = req.params;
 
-    const ambulance = await Ambulance.findById(ambulanceId).select("location");
+    const ambulance =
+      await Ambulance.findById(ambulanceId).select("latitude longitude");
 
     if (!ambulance) {
       return res.status(404).json({ message: "Ambulance not found" });
     }
 
-    res.status(200).json({ location: ambulance.location });
+    res.status(200).json({
+      latitude: ambulance.latitude,
+      longitude: ambulance.longitude,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -252,7 +249,6 @@ const deleteAmbulance = async (req, res) => {
 const assignNewDriver = async (req, res) => {
   try {
     const { ambulanceId, driverId } = req.body;
-    // console.log(ambulanceId, driverId);
 
     // Check if ambulance exists
     const ambulance = await Ambulance.findById(ambulanceId);
@@ -279,10 +275,9 @@ const assignNewDriver = async (req, res) => {
     await ambulance.save();
 
     // Update driver status
-    await AmbulanceDriver.findByIdAndUpdate(driver._id, {
-      available: false,
-      ambulance: ambulance._id,
-    });
+    driver.available = false;
+    driver.ambulance = ambulance._id;
+    await driver.save();
 
     res
       .status(200)
@@ -358,6 +353,39 @@ const getAmbulancesNeedingMaintenance = async (req, res) => {
   }
 };
 
+const assignDriverAndNotify = async (userId, location, driversInRange) => {
+  const nearestDrivers = driversInRange
+    .sort(
+      (a, b) =>
+        calculateDistance(location, {
+          latitude: a.latitude,
+          longitude: a.longitude,
+        }) -
+        calculateDistance(location, {
+          latitude: b.latitude,
+          longitude: b.longitude,
+        })
+    )
+    .slice(0, 3);
+
+  const assignedDriver = nearestDrivers[0];
+
+  const sosRequest = await SOS.create({
+    userId,
+    location,
+    assignedDriver: assignedDriver._id,
+    status: "assigned",
+  });
+
+  sendNotification(assignedDriver._id, {
+    title: "SOS Alert",
+    message: `User needs assistance at latitude: ${location.latitude}, longitude: ${location.longitude}`,
+    location,
+  });
+
+  return { sosRequest, assignedDriver };
+};
+
 export {
   registerAmbulance,
   getNearestAmbulances,
@@ -372,218 +400,5 @@ export {
   getAmbulancesByArea,
   getAvailableAmbulanceCount,
   getAmbulancesNeedingMaintenance,
+  assignDriverAndNotify,
 };
-
-// import { asyncHandler } from "../utils/asyncHandler.js";
-// import { ApiError } from "../utils/ApiError.js";
-// import { ApiResponse } from "../utils/ApiResponse.js";
-// import Ambulance from "../models/ambulance.model.js";
-// import AmbulanceDriver from "../models/ambulanceDriver.model.js";
-
-// // Register a new ambulance (with aggregation pipeline for driver assignment)
-// const registerAmbulance = asyncHandler(async (req, res) => {
-//   const {
-//     location,
-//     vehicleNumber,
-//     vehicleRegistrationNumber,
-//     vehicleModelNumber,
-//     documents,
-//   } = req.body;
-
-//   if (
-//     !location ||
-//     !vehicleNumber ||
-//     !vehicleRegistrationNumber ||
-//     !vehicleModelNumber ||
-//     !documents
-//   ) {
-//     throw new ApiError(400, "All fields are required");
-//   }
-
-//   const existingAmbulance = await Ambulance.findOne({ vehicleNumber });
-//   if (existingAmbulance) {
-//     throw new ApiError(409, "Ambulance already registered");
-//   }
-
-//   // Assign an available driver using an aggregation pipeline
-//   const driverAssignment = await AmbulanceDriver.aggregate([
-//     { $match: { available: true } },
-//     { $sample: { size: 1 } }, // Randomly select one available driver
-//   ]);
-
-//   const assignedDriver =
-//     driverAssignment.length > 0 ? driverAssignment[0]._id : null;
-
-//   // Create ambulance
-//   const ambulance = await Ambulance.create({
-//     location,
-//     vehicleNumber,
-//     vehicleRegistrationNumber,
-//     vehicleModelNumber,
-//     documents,
-//     currentDriver: assignedDriver,
-//   });
-
-//   // Mark driver as assigned (if one was found)
-//   if (assignedDriver) {
-//     await AmbulanceDriver.findByIdAndUpdate(assignedDriver, {
-//       available: false,
-//       ambulance: ambulance._id,
-//     });
-//   }
-
-//   return res
-//     .status(201)
-//     .json(new ApiResponse(201, ambulance, "Ambulance registered successfully"));
-// });
-
-// // Update ambulance details
-// const updateAmbulance = asyncHandler(async (req, res) => {
-//   const ambulance = await Ambulance.findByIdAndUpdate(
-//     req.params.ambulanceId,
-//     req.body,
-//     { new: true }
-//   );
-
-//   if (!ambulance) throw new ApiError(404, "Ambulance not found");
-
-//   return res
-//     .status(200)
-//     .json(new ApiResponse(200, ambulance, "Ambulance updated successfully"));
-// });
-
-// // Fetch all ambulances with pagination and filters
-// const getAmbulances = asyncHandler(async (req, res) => {
-//   const { page = 1, limit = 10, available, location } = req.query;
-
-//   let filter = {};
-//   if (available !== undefined) filter.available = available === "true";
-//   if (location)
-//     filter["location.coordinates"] = { $regex: location, $options: "i" };
-
-//   const ambulances = await Ambulance.find(filter)
-//     .skip((page - 1) * limit)
-//     .limit(Number(limit));
-
-//   const totalCount = await Ambulance.countDocuments(filter);
-
-//   return res
-//     .status(200)
-//     .json(
-//       new ApiResponse(
-//         200,
-//         { ambulances, totalCount, totalPages: Math.ceil(totalCount / limit) },
-//         "Ambulances fetched successfully"
-//       )
-//     );
-// });
-
-// // Fetch ambulance by ID (with driver and hospital details)
-// const getAmbulanceById = asyncHandler(async (req, res) => {
-//   const ambulance = await Ambulance.findById(req.params.ambulanceId).populate(
-//     "currentDriver hospital"
-//   );
-
-//   if (!ambulance) throw new ApiError(404, "Ambulance not found");
-
-//   return res
-//     .status(200)
-//     .json(
-//       new ApiResponse(200, ambulance, "Ambulance details fetched successfully")
-//     );
-// });
-
-// // Fetch live location of an ambulance
-// const getLiveAmbulanceLocation = asyncHandler(async (req, res) => {
-//   const ambulance = await Ambulance.findById(req.params.ambulanceId);
-//   if (!ambulance) throw new ApiError(404, "Ambulance not found");
-
-//   return res
-//     .status(200)
-//     .json(
-//       new ApiResponse(
-//         200,
-//         ambulance.location,
-//         "Live location fetched successfully"
-//       )
-//     );
-// });
-
-// // Fetch nearest available ambulances using geospatial queries
-// const getNearestAmbulances = asyncHandler(async (req, res) => {
-//   const { latitude, longitude, radius = 5000 } = req.body;
-
-//   if (!latitude || !longitude)
-//     throw new ApiError(400, "Latitude and longitude are required");
-
-//   const ambulances = await Ambulance.find({
-//     location: {
-//       $near: {
-//         $geometry: {
-//           type: "Point",
-//           coordinates: [parseFloat(longitude), parseFloat(latitude)],
-//         },
-//         $maxDistance: parseInt(radius),
-//       },
-//     },
-//     available: true,
-//   });
-
-//   return res
-//     .status(200)
-//     .json(
-//       new ApiResponse(
-//         200,
-//         ambulances,
-//         "Nearest ambulances fetched successfully"
-//       )
-//     );
-// });
-
-// // Update ambulance live location
-// const updateAmbulanceLocation = asyncHandler(async (req, res) => {
-//   const { latitude, longitude } = req.body;
-//   if (!latitude || !longitude)
-//     throw new ApiError(400, "Latitude and longitude are required");
-
-//   const ambulance = await Ambulance.findByIdAndUpdate(
-//     req.params.ambulanceId,
-//     { "location.coordinates": [longitude, latitude] },
-//     { new: true }
-//   );
-
-//   if (!ambulance) throw new ApiError(404, "Ambulance not found");
-
-//   return res
-//     .status(200)
-//     .json(
-//       new ApiResponse(200, ambulance, "Ambulance location updated successfully")
-//     );
-// });
-
-// // Delete an ambulance
-// const deleteAmbulance = asyncHandler(async (req, res) => {
-//   const ambulance = await Ambulance.findByIdAndDelete(req.params.ambulanceId);
-//   if (!ambulance) throw new ApiError(404, "Ambulance not found");
-
-//   return res
-//     .status(200)
-//     .json(
-//       new ApiResponse(
-//         200,
-//         { ambulanceId: req.params.ambulanceId },
-//         "Ambulance deleted successfully"
-//       )
-//     );
-// });
-
-// export {
-//   registerAmbulance,
-//   updateAmbulance,
-//   getAmbulances,
-//   getAmbulanceById,
-//   getLiveAmbulanceLocation,
-//   getNearestAmbulances,
-//   updateAmbulanceLocation,
-//   deleteAmbulance,
-// };

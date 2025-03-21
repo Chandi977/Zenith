@@ -1,13 +1,15 @@
 import express from "express"; // Import Express framework
 import cors from "cors"; // Import CORS middleware
 import cookieParser from "cookie-parser"; // Import Cookie parser middleware
+import events from "events"; // Import events module
+import admin from "firebase-admin"; // Firebase Admin SDK
 
 const app = express(); // Create an instance of Express
 
 // Configure CORS to allow requests from specified origin and enable credentials
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN, // Allowed origin for CORS requests
+    origin: process.env.CORS_ORIGIN || "*", // Allowed origin for CORS requests
     credentials: true, // Enable sending credentials (e.g., cookies) with CORS requests
   })
 );
@@ -30,20 +32,40 @@ import userRouter from "./routes/user.routes.js";
 import healthcheckRouter from "./routes/healthcheck.routes.js";
 import ambulanceRouter from "./routes/ambulance.routes.js";
 import ambulanceDriver from "./routes/ambulanceDriver.routes.js";
-// import hospitalRouter from "./routes/hospital.routes.js";
-// import routeRouter from "./routes/route.routes.js";
+import hospitalRouter from "./routes/hospital.routes.js"; // Import hospital routes
+// import routeRouter from "./routes/route.routes.js"; // Uncommented
 
-// Define routes for the API version 1, using the imported userRouter
-//routes declaration
+// Initialize Firebase Admin SDK
+admin.initializeApp({
+  credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_CONFIG)),
+});
+
+// Define routes for the API version 1, using the imported routers
 app.use("/api/v1/healthcheck", healthcheckRouter);
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/otp", otpRoutes);
 app.use("/api/v1/ambulance", ambulanceRouter);
 app.use("/api/v1/ambulanceDriver", ambulanceDriver);
-// app.use("/api/v1/hospital", hospitalRouter);
-// app.use("/api/v1/route", routeRouter);
+app.use("/api/v1/hospital", hospitalRouter); // Add hospital routes
+// app.use("/api/v1/route", routeRouter); // Added
+
+// Fallback route for undefined endpoints
+app.use((req, res) => {
+  res.status(404).json({ success: false, message: "Endpoint not found" });
+});
+
+// Global error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(err.statusCode || 500).json({
+    success: false,
+    message: err.message || "Internal Server Error",
+  });
+});
 
 import { rotateDriverShifts } from "./controllers/ambulanceDriver.controller.js"; // Adjust path if needed
 rotateDriverShifts(); // Ensure it's triggered initially
 
+// Increase WebSocket listener limits
+events.EventEmitter.defaultMaxListeners = 50; // Increase the listener limit
 export { app }; // Export the Express app for use in other modules

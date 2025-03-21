@@ -11,13 +11,19 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
       req.cookies?.accessToken || // Try to get the access token from cookies
       req.header("Authorization")?.replace("Bearer ", ""); // If not in cookies, try to get it from Authorization header
 
-    // If no token is found, throw an unauthorized error
+    // If no token is found, return an unauthorized error
     if (!token) {
-      throw new ApiError(401, "Unauthorized request");
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request. Token is missing.",
+      });
     }
 
     // Verifying the token with the secret key from environment variables
     const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    if (Date.now() >= decodedToken.exp * 1000) {
+      throw new ApiError(401, "Token has expired");
+    }
 
     // Querying the database for the user with the decoded token's ID, excluding password and refreshToken from the result
     const user = await User.findById(decodedToken?._id).select(
@@ -33,7 +39,10 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
     req.user = user;
     next(); // Proceed to the next middleware/route
   } catch (error) {
-    // If any error occurs, throw an error with an appropriate message
-    throw new ApiError(401, error?.message || "Invalid Access Token");
+    // If any error occurs, return an error with an appropriate message
+    return res.status(401).json({
+      success: false,
+      message: error.message || "Invalid Access Token.",
+    });
   }
 });

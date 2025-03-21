@@ -1,57 +1,46 @@
-// Importing the necessary modules
-import express from "express"; // Express is a web framework for Node.js
-import {
-  createAmbulanceDriver, // Import the controller for creating an ambulance driver
-  loginAmbulanceDriver,
-  getAllAmbulanceDrivers, // Import the controller for retrieving all ambulance drivers
-  getAmbulanceDriverById, // Import the controller for retrieving a single ambulance driver by ID
-  updateAmbulanceDriver, // Import the controller for updating an ambulance driver's details
-  deleteAmbulanceDriver, // Import the controller for deleting an ambulance driver
-  updateDriverShift, // Import the controller for updating the driver's shift
-  addDriverRating, // Import the controller for adding a rating to a driver
-} from "../controllers/ambulanceDriver.controller.js"; // Import the controllers from the ambulance driver controller file
+import express from "express";
 import multer from "multer";
+import {
+  createAmbulanceDriver,
+  loginAmbulanceDriver,
+  getAllAmbulanceDrivers,
+  getAmbulanceDriverById,
+  updateAmbulanceDriver,
+  deleteAmbulanceDriver,
+  updateDriverShift,
+  addDriverRating,
+  receiveSOSNotification,
+  handleSOSRequest,
+  updateDriverLocation,
+} from "../controllers/ambulanceDriver.controller.js";
 
-// Creating a new router instance using express.Router()
 const router = express.Router();
 
-// Defining the routes for ambulance driver-related operations with descriptive route names
-
-// Route to register a new ambulance driver
+// Configure Multer for file uploads
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 5MB file size limit
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB file size limit
 });
 
+// Routes
 router.post(
-  "/registerAmbulanceDriver",
+  "/register",
   upload.fields([
     { name: "driverLicense", maxCount: 1 },
     { name: "govtIdProof", maxCount: 1 },
     { name: "driverPhoto", maxCount: 1 },
   ]),
-  createAmbulanceDriver
+  createAmbulanceDriver // Ensure hospital is included in the request body
 );
-// Route to get the list of all ambulance drivers
-router.get("/getAllAmbulanceDrivers", getAllAmbulanceDrivers);
+router.post("/login", loginAmbulanceDriver);
+router.get("/ambulances", getAllAmbulanceDrivers);
+router.get("/ambulanceById/:id", getAmbulanceDriverById);
+router.put("/updateDriverData/:id", updateAmbulanceDriver);
+router.delete("/:id", deleteAmbulanceDriver);
+router.patch("/:id/shift", updateDriverShift);
+router.post("/:id/rating", addDriverRating);
+router.post("/sos/receive", receiveSOSNotification);
+router.post("/sos/handle", handleSOSRequest);
+router.patch("/:driverId/location", updateDriverLocation);
 
-// login driver
-router.post("/loginAmbulanceDriver", loginAmbulanceDriver);
-
-// Route to get details of a single ambulance driver by their ID
-router.get("/getAmbulanceDriver/:id", getAmbulanceDriverById);
-
-// Route to update details of an ambulance driver by their ID
-router.put("/updateAmbulanceDriver/:id", updateAmbulanceDriver);
-
-// Route to delete an ambulance driver by their ID
-router.delete("/deleteAmbulanceDriver/:id", deleteAmbulanceDriver);
-
-// Route to update the shift of a specific ambulance driver by their ID
-router.put("/updateDriverShift/:id", updateDriverShift);
-
-// Route to add a rating for a specific ambulance driver by their ID
-router.post("/addDriverRating/:id", addDriverRating);
-
-// Export the router so it can be used in other parts of the application
 export default router;

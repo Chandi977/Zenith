@@ -31,13 +31,22 @@ const userSchema = new Schema(
       required: false,
       default: "",
     },
-
     password: {
       type: String, // Field type is String
       required: [true, "Password is required"], // Custom error message if the field is missing
     },
     refreshToken: {
       type: String, // Field type is String for storing refresh token
+    },
+    role: {
+      type: String,
+      enum: ["user", "ambulanceDriver", "admin"],
+      default: "user",
+    },
+    isOnShift: { type: Boolean, default: false }, // Indicates if the driver is on a working shift
+    location: {
+      latitude: { type: Number },
+      longitude: { type: Number },
     },
   },
   { timestamps: true } // Adding timestamps (createdAt and updatedAt) to the schema

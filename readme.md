@@ -10,6 +10,14 @@ Zenith is an **AR-powered emergency route simulator** that enhances ambulance na
 
 ---
 
+## 📌 New Features
+
+- **AI-Driven Rerouting**: Dynamically adjusts routes based on traffic and roadblocks.
+- **Voice Command Processing**: Supports voice commands for route selection and SOS requests.
+- **Enhanced Traffic Data**: Real-time traffic updates integrated with Google Maps API.
+
+---
+
 ## 🏗️ System Architecture
 
 ### 1️⃣ **Android UI (User Interface & Interaction Layer)**
@@ -82,7 +90,7 @@ Zenith is an **AR-powered emergency route simulator** that enhances ambulance na
 
 ---
 
-## 📂 Folder Structure
+## 📂 Updated Folder Structure
 
 ```
 Zenith/
@@ -91,6 +99,7 @@ Zenith/
 │   │   ├── user.controller.js
 │   │   ├── route.controller.js
 │   │   ├── tracking.controller.js
+│   │   ├── ambulanceDriver.controller.js
 │   │
 │   ├── middlewares/
 │   │   ├── auth.middleware.js
@@ -109,6 +118,8 @@ Zenith/
 │   ├── utils/
 │   │   ├── logger.js
 │   │   ├── errorHandler.js
+│   │   ├── googleMaps.js
+│   │   ├── sendNotification.js
 │   │
 │   ├── sockets/
 │   │   ├── tracking.socket.js
@@ -176,6 +187,28 @@ Zenith/
 
 - **Speech-to-Text** API for voice commands.
 - **Text-to-Speech** API for route guidance.
+
+### **7️⃣ Rerouting**
+
+- `POST /api/v1/routes/reroute` - Handles AI-driven rerouting.
+- **Request Body:**
+
+```json
+{
+  "driverId": "driver123",
+  "currentLocation": { "latitude": 28.7041, "longitude": 77.1025 },
+  "destination": { "latitude": 28.5355, "longitude": 77.391 }
+}
+```
+
+- **Response:**
+
+```json
+{
+  "message": "Rerouting successful",
+  "path": { ... }
+}
+```
 
 ---
 

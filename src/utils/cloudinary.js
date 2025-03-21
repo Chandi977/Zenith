@@ -23,9 +23,9 @@ const uploadOnCloudinary = async (buffer, folder) => {
     );
 
     const readableStream = new Readable();
-    readableStream.push(buffer);
-    readableStream.push(null);
-    readableStream.pipe(uploadStream);
+    readableStream.push(buffer); // Push the buffer to the readable stream
+    readableStream.push(null); // End the stream
+    readableStream.pipe(uploadStream); // Pipe the stream to Cloudinary
   });
 };
 

@@ -9,12 +9,12 @@ import {
   resetPassword, // Resets password using OTP (Public API) => POST /api/users/reset-password
   sendOTP, // Sends OTP to user email (Public API) => POST /api/users/send-otp
   refreshTokens, // Refreshes authentication tokens (Public API) => POST /api/users/refresh-tokens
+  sendSOSRequest, // Use the comprehensive SOS request function
 } from "../controllers/user.controllers.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
-import multer from "multer";
+import { upload } from "../middlewares/multer.middleware.js"; // Import Multer middleware
 
 const router = express.Router();
-const upload = multer({ dest: "uploads/" }); // Configure multer storage as needed
 
 // Public Routes (No authentication required)
 router.post("/register", registerUser); // Register a new user
@@ -30,8 +30,12 @@ router.put("/update/:userId", verifyJWT, uploadUserData); // Update user details
 router.post(
   "/upload-photo/:userId",
   verifyJWT,
-  upload.single("avatar"),
+  upload.single("avatar"), // Use Multer middleware to handle single file upload
   uploadUserPhoto
 ); // Upload user profile photo
+
+// SOS Routes
+router.post("/send-sos", verifyJWT, sendSOSRequest); // Send SOS message using sendSOSRequest
+// router.get("/receive-sos", verifyJWT, receiveSOS); // Receive SOS messages
 
 export default router;
