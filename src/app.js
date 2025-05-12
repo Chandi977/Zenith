@@ -9,8 +9,19 @@ const app = express(); // Create an instance of Express
 // Configure CORS to allow requests from specified origin and enable credentials
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || "*" || "http://localhost:54979", // Allowed origin for CORS requests
-    credentials: true, // Enable sending credentials (e.g., cookies) with CORS requests
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+        "http://localhost:3000", // Add your frontend origin
+        "http://localhost:54979", // Add your Flutter app origin
+        "*",
+      ];
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true, // Enable credentials (cookies, etc.)
   })
 );
 app.use(express.json());
