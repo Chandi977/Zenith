@@ -9,8 +9,9 @@ const app = express();
 // ✅ Define allowed origins
 const allowedOrigins = [
   "http://localhost:3000",
-  "http://localhost:54979", // Add any frontend port you are using
+  "http://localhost:57917", // Add any frontend port you are using
   "https://your-production-frontend.com", // Add your deployed frontend domain
+  "*",
 ];
 
 // ✅ CORS options setup
