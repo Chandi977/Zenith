@@ -19,8 +19,11 @@ dotenv.config({
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
+  const firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+  firebaseConfig.private_key = firebaseConfig.private_key.replace(/\\n/g, "\n");
+
   admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_CONFIG)),
+    credential: admin.credential.cert(firebaseConfig),
   });
 } else {
   admin.app(); // Use the already initialized app
