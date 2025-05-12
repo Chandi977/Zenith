@@ -13,6 +13,7 @@ app.use(
     credentials: true, // Enable sending credentials (e.g., cookies) with CORS requests
   })
 );
+app.use(express.json());
 
 // Middleware to parse JSON request bodies with a limit of 16kb
 app.use(express.json({ limit: "16kb" }));
