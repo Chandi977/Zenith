@@ -6,24 +6,41 @@ import admin from "firebase-admin"; // Firebase Admin SDK
 
 const app = express(); // Create an instance of Express
 
-// Configure CORS to allow requests from specified origin and enable credentials
+// Updated CORS configuration
 app.use(
   cors({
-    origin: (origin, callback) => {
-      const allowedOrigins = [
-        "http://localhost:3000", // Add your frontend origin
-        "http://localhost:54979", // Add your Flutter app origin
-        "*",
-      ];
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true, // Enable credentials (cookies, etc.)
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:54979",
+      "https://zenith-oy4b.onrender.com",
+      "http://localhost:8080",
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-access-token"],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   })
 );
+
+// Add headers middleware for additional CORS handling
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, x-access-token"
+  );
+  next();
+});
+
 app.use(express.json());
 
 // Middleware to parse JSON request bodies with a limit of 16kb
