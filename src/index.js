@@ -7,8 +7,6 @@ import connectDB from "./db/index.js";
 import { app } from "./app.js";
 import Ambulance from "./models/ambulance.model.js";
 import { rotateDriverShifts } from "./controllers/ambulanceDriver.controller.js";
-import cluster from "cluster";
-import os from "os";
 import admin from "firebase-admin"; // Firebase Admin SDK
 import events from "events"; // Ensure this import exists
 
@@ -48,7 +46,7 @@ const server = http.createServer(app);
 // Initialize Socket.io for real-time communication
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "*", // You can replace * with specific allowed origins if needed
     methods: ["GET", "POST"],
   },
 });
@@ -88,37 +86,17 @@ io.on("connection", (socket) => {
   });
 });
 
-// Enable PM2 cluster mode for load balancing
-if (cluster.isPrimary) {
-  const numCPUs = os.cpus().length;
-  console.log(`Primary process running. Forking ${numCPUs} workers...`);
+// ✅ No clustering: just connect DB and start the server directly
+connectDB()
+  .then(async () => {
+    console.log("✅ MongoDB connected successfully!");
+    await rotateDriverShifts(); // Trigger shift rotation
 
-  // Trigger shift rotation only in the primary process
-  connectDB()
-    .then(async () => {
-      console.log("✅ MongoDB connected successfully!");
-      await rotateDriverShifts(); // Trigger shift rotation
-    })
-    .catch((err) => {
-      console.error("❌ Error during driver shift rotation:", err);
+    const PORT = process.env.PORT || 8000;
+    server.listen(PORT, () => {
+      console.log(`🚀 Server is running on port ${PORT}`);
     });
-
-  for (let i = 0; i < numCPUs; i++) {
-    cluster.fork();
-  }
-  cluster.on("exit", (worker) => {
-    console.log(`Worker ${worker.process.pid} exited. Forking a new worker...`);
-    cluster.fork();
+  })
+  .catch((err) => {
+    console.error("❌ MONGO DB CONNECTION FAILED!!!", err);
   });
-} else {
-  connectDB()
-    .then(() => {
-      const PORT = process.env.PORT || 8000;
-      server.listen(PORT, () => {
-        console.log(`🚀 Worker ${process.pid} running on port ${PORT}`);
-      });
-    })
-    .catch((err) => {
-      console.error("❌ MONGO DB CONNECTION FAILED!!!", err);
-    });
-}
