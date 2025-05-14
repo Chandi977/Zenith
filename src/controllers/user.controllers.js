@@ -82,6 +82,9 @@ const loginUser = asyncHandler(async (req, res) => {
   const { accessToken, refreshToken } =
     await generateAccessAndRefreshTokens(user);
 
+  const loggedInUser = await User.findById(user._id).select(
+    "-password -refreshToken -accessToken"
+  );
   return res
     .status(200)
     .cookie("accessToken", accessToken, { httpOnly: true })
@@ -115,8 +118,22 @@ const resetPassword = asyncHandler(async (req, res) => {
 });
 
 const logoutUser = asyncHandler(async (req, res) => {
+  // Clear tokens from database
+  await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $set: {
+        refreshToken: undefined,
+        accessToken: undefined,
+      },
+    },
+    { new: true }
+  );
+
+  // Clear cookies
   res.clearCookie("accessToken");
   res.clearCookie("refreshToken");
+
   return res.status(200).json(new ApiResponse(200, {}, "Logout successful"));
 });
 
@@ -215,6 +232,7 @@ const generateAccessAndRefreshTokens = async (user) => {
     const accessToken = user.generateAccessToken();
     const refreshToken = user.generateRefreshToken();
 
+    user.accessToken = accessToken;
     user.refreshToken = refreshToken;
     await user.save({ validateBeforeSave: false });
 
@@ -246,7 +264,7 @@ const sendSOSRequest = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Valid location (latitude, longitude) is required");
   }
 
-  const reachableRange = 10; // Initial range in km
+  let reachableRange = 10; // Change from const to let
   const maxRange = 50; // Maximum range in km
   let driversInRange = [];
 
@@ -255,7 +273,7 @@ const sendSOSRequest = asyncHandler(async (req, res) => {
 
     if (driversInRange.length > 0) break;
 
-    reachableRange += 10; // Increase range by 10 km
+    reachableRange += 10; // Now we can modify reachableRange
   }
 
   if (driversInRange.length === 0) {

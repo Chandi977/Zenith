@@ -13,7 +13,8 @@ import { sendNotification } from "../utils/sendNotification.js"; // Import the s
 import Hospital from "../models/hospital.models.js"; // Import the Hospital model
 import { verifyOTPProgrammatically } from "./otp.controller.js"; // Import verifyOTPProgrammatically
 import { getAddressCoordinates } from "../utils/googleMaps.js";
-
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { ApiError } from "../utils/ApiError.js"; // Change to named import
 dotenv.config();
 
 const sosEventEmitter = new EventEmitter(); // Create an event emitter instance
@@ -64,7 +65,7 @@ const createAmbulanceDriver = async (req, res) => {
       "longitude",
       "latitude",
       "otp",
-      "hospital",
+      // "hospital",
     ];
 
     for (const field of requiredFields) {
@@ -90,6 +91,7 @@ const createAmbulanceDriver = async (req, res) => {
       });
     }
 
+    /* Temporarily disabled hospital validation
     // Fetch hospital data using the utility function
     const hospitals = await getAddressCoordinates(hospital);
 
@@ -97,7 +99,6 @@ const createAmbulanceDriver = async (req, res) => {
     const hospitalExists = hospitals.find((h) =>
       h.name
         .replace(/[,]/g, "")
-        .toLowerCase()
         .includes(normalizedHospital.replace(/[,]/g, "").toLowerCase())
     );
 
@@ -131,6 +132,7 @@ const createAmbulanceDriver = async (req, res) => {
         rating: hospitalExists.rating,
       });
     }
+    */
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -154,7 +156,7 @@ const createAmbulanceDriver = async (req, res) => {
 
     await verifyOTPProgrammatically(email, otp);
 
-    // Create new driver instance
+    // Create new driver instance without hospital reference
     const newDriver = new AmbulanceDriver({
       userId: `DR${Date.now()}`,
       driverName,
@@ -172,17 +174,14 @@ const createAmbulanceDriver = async (req, res) => {
       assignedShift,
       latitude,
       longitude, // Save driver's location
-      hospital: hospitalDocument._id, // Use the ObjectId of the hospital document
+      // hospital field removed
     });
 
     await newDriver.save();
 
     return res.status(201).json({
       message: "Ambulance driver created successfully",
-      driver: {
-        ...newDriver.toObject(),
-        hospital: hospitalDocument.name, // Include hospital name in response
-      },
+      driver: newDriver.toObject(),
     });
   } catch (error) {
     console.error("Driver Upload Error:", error.stack);
@@ -193,61 +192,87 @@ const createAmbulanceDriver = async (req, res) => {
   }
 };
 
-// Login function (with OTP verification)
-const loginAmbulanceDriver = async (req, res) => {
-  try {
-    const { email, password, otp, location } = req.body;
-    console.log("Login request received:", req.body);
+const loginAmbulanceDriver = asyncHandler(async (req, res) => {
+  const { email, password, otp } = req.body;
 
-    if (!email || !password || !otp) {
-      return res
-        .status(400)
-        .json({ message: "Email, password, and OTP are required" });
-    }
-
-    const driver = await AmbulanceDriver.findOne({ email });
-    if (!driver) {
-      return res.status(404).json({ message: "Driver not found" });
-    }
-
-    // Verify OTP
-    await verifyOTPProgrammatically(email, otp);
-
-    // Check password
-    const isMatch = await driver.isPasswordCorrect(password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    if (location && location.latitude && location.longitude) {
-      driver.location = location; // Update driver's location on login
-      await driver.save();
-    }
-
-    // Generate JWT token for authentication
-    const token = jwt.sign({ userId: driver._id }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
-    });
-
-    res.status(200).json({
-      message: "Login successful",
-      driver: {
-        userId: driver.userId,
-        driverName: driver.driverName,
-        contactNumber: driver.contactNumber,
-        email: driver.email,
-        available: driver.available,
-        ambulance: driver.ambulance,
-        assignedShift: driver.assignedShift,
-        location: driver.location,
-        token,
-      },
-    });
-  } catch (error) {
-    console.error("Error in login process: ", error.message);
-    res.status(500).json({ message: "Server error", error: error.message });
+  if (!email || !password || !otp) {
+    throw new ApiError(400, "Email/Username, Password, and OTP are required");
   }
-};
+
+  const driver = await AmbulanceDriver.findOne({ email });
+  if (!driver) {
+    throw new ApiError(401, "driver does not exist");
+  }
+
+  const isPasswordValid = await driver.isPasswordCorrect(password);
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Invalid credentials");
+  }
+
+  // Use the helper function to verify OTP
+  await verifyOTPProgrammatically(email || driver.email, otp);
+
+  const { accessToken, refreshToken } =
+    await generateAccessAndRefreshTokens(driver);
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, { httpOnly: true })
+    .cookie("refreshToken", refreshToken, { httpOnly: true })
+    .json(new ApiResponse(200, user, "Login successful"));
+});
+
+// const loginAmbulanceDriver = asyncHandler(async (req, res) => {
+//   const { email, password, otp } = req.body;
+
+//   if (!email || !password || !otp) {
+//     throw new ApiError(400, "Email, password, and OTP are required");
+//   }
+
+//   // Find driver and explicitly select password field
+//   const driver = await AmbulanceDriver.findOne({ email }).select("+password");
+//   if (!driver) {
+//     throw new ApiError(401, "Driver not found");
+//   }
+
+//   console.log("Login attempt for:", email);
+//   console.log("Password received:", password);
+
+//   // Try direct bcrypt compare for debugging
+//   try {
+//     const directCompare = await bcrypt.compare(password, driver.password);
+//     console.log("Direct bcrypt compare result:", directCompare);
+//   } catch (error) {
+//     console.error("Direct compare error:", error);
+//   }
+
+//   const isPasswordValid = await driver.isPasswordCorrect(password);
+//   if (!isPasswordValid) {
+//     throw new ApiError(401, "Invalid credentials");
+//   }
+
+//   await verifyOTPProgrammatically(email, otp);
+
+//   const token = jwt.sign({ userId: driver._id }, process.env.JWT_SECRET, {
+//     expiresIn: "1h",
+//   });
+
+//   return res
+//     .status(200)
+//     .cookie("token", token, { httpOnly: true })
+//     .json(
+//       new ApiResponse(
+//         200,
+//         {
+//           userId: driver.userId,
+//           driverName: driver.driverName,
+//           email: driver.email,
+//           token,
+//         },
+//         "Login successful"
+//       )
+//     );
+// });
 
 // Get all ambulance drivers
 const getAllAmbulanceDrivers = async (req, res) => {

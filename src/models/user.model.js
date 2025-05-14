@@ -38,6 +38,9 @@ const userSchema = new Schema(
     refreshToken: {
       type: String, // Field type is String for storing refresh token
     },
+    accessToken: {
+      type: String, // Field type is String for storing access token
+    },
     role: {
       type: String,
       enum: ["user", "ambulanceDriver", "admin"],

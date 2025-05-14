@@ -4,25 +4,44 @@ const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
 // Function to calculate distance between two locations
 const calculateDistance = (location1, location2) => {
-  const toRadians = (degrees) => (degrees * Math.PI) / 180;
-  const R = 6371; // Earth's radius in km
+  try {
+    // Input validation
+    if (
+      !location1?.latitude ||
+      !location1?.longitude ||
+      !location2?.latitude ||
+      !location2?.longitude
+    ) {
+      throw new Error("Invalid location coordinates");
+    }
 
-  const lat1 = toRadians(location1.latitude);
-  const lon1 = toRadians(location1.longitude);
-  const lat2 = toRadians(location2.latitude);
-  const lon2 = toRadians(location2.longitude);
+    // Constants and helper function
+    const R = 6371; // Earth's radius in km
+    const toRadians = (degrees) => (degrees * Math.PI) / 180;
 
-  const dLat = lat2 - lat1;
-  const dLon = lon2 - lon1;
+    // Convert coordinates to radians first
+    const lat1 = toRadians(location1.latitude);
+    const lat2 = toRadians(location2.latitude);
+    const lon1 = toRadians(location1.longitude);
+    const lon2 = toRadians(location2.longitude);
 
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    // Calculate differences after conversion
+    const dLat = lat2 - lat1;
+    const dLon = lon2 - lon1;
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = R * c; // Distance in km
+    // Haversine formula
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
 
-  return distance;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c; // Distance in km
+
+    return Number(distance.toFixed(2));
+  } catch (error) {
+    console.error("Error calculating distance:", error);
+    throw new Error("Failed to calculate distance between locations");
+  }
 };
 
 // Function to calculate ETA between two locations

@@ -6,40 +6,64 @@ const getRoutes = (req, res) => {
 };
 
 // Calculate distance between two locations
-const calculateDistance = (location1, location2) => {
-  const toRadians = (degrees) => (degrees * Math.PI) / 180;
-  const R = 6371; // Earth's radius in km
+export const calculateDistance = (location1, location2) => {
+  try {
+    // Input validation
+    if (
+      !location1?.latitude ||
+      !location1?.longitude ||
+      !location2?.latitude ||
+      !location2?.longitude
+    ) {
+      throw new Error("Invalid location coordinates");
+    }
 
-  const lat1 = toRadians(location1.latitude);
-  const lon1 = toRadians(location1.longitude);
-  const lat2 = toRadians(location2.latitude);
-  const lon2 = toRadians(location2.longitude);
+    // Define constants
+    const R = 6371; // Earth's radius in kilometers
+    const toRadians = (degrees) => degrees * (Math.PI / 180);
 
-  const dLat = lat2 - lat1;
-  const dLon = dLon - lon1; // Fixed variable name
+    // Convert coordinates to radians
+    const lat1 = toRadians(location1.latitude);
+    const lon1 = toRadians(location1.longitude);
+    const lat2 = toRadians(location2.latitude);
+    const lon2 = toRadians(location2.longitude);
 
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    // Calculate differences
+    const dLat = lat2 - lat1;
+    const dLon = lon2 - lon1;
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = R * c; // Distance in km
+    // Calculate distance using Haversine formula
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
 
-  return distance;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c;
+
+    return Number(distance.toFixed(2));
+  } catch (error) {
+    console.error("Distance calculation error:", error);
+    throw new Error("Failed to calculate distance between locations");
+  }
 };
 
 // Generate a path between two points
-const generatePath = (startPoint, endPoint) => {
-  const path = {
-    start: startPoint,
-    end: endPoint,
-    waypoints: [
-      { location: "Waypoint 1", traffic: "moderate" },
-      { location: "Waypoint 2", traffic: "low" },
-    ],
-    estimatedTime: "15 mins",
+export const generatePath = (startPoint, endPoint) => {
+  // Validate inputs
+  if (!startPoint || !endPoint) {
+    throw new Error("Start and end points are required");
+  }
+
+  const distance = calculateDistance(startPoint, endPoint);
+
+  return {
+    distance,
+    estimatedTime: Math.round(distance * 2), // Rough estimate: 2 minutes per km
+    path: {
+      start: startPoint,
+      end: endPoint,
+    },
   };
-  return path;
 };
 
 const generatePathData = async (assignedDriver, location) => {
@@ -77,4 +101,4 @@ const generatePathData = async (assignedDriver, location) => {
   };
 };
 
-export { getRoutes, calculateDistance, generatePath, generatePathData };
+export { getRoutes, generatePathData };

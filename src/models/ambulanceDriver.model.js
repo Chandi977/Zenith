@@ -32,7 +32,7 @@ const ambulanceDriverSchema = new mongoose.Schema(
     hospital: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Hospital", // Reference to the associated hospital
-      required: true, // Hospital is mandatory for registration
+      required: false, // Change from true to false
     },
     assignedShift: {
       type: String,
@@ -63,14 +63,36 @@ ambulanceDriverSchema.virtual("averageRating").get(function () {
 });
 
 ambulanceDriverSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next(); // Proceed if password is not modified
-
-  this.password = await bcrypt.hash(this.password, 10); // Hash the password with a salt rounds of 10
-  next(); // Proceed to the next middleware or save the document
+  if (!this.isModified("password")) return next();
+  try {
+    console.log("Original password before hash:", this.password);
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    console.log("Password after hashing:", this.password);
+    next();
+  } catch (error) {
+    console.error("Password hashing error:", error);
+    next(error);
+  }
 });
 
-ambulanceDriverSchema.methods.isPasswordCorrect = async function (password) {
-  return await bcrypt.compare(password, this.password); // Compare provided password with stored hashed password
+ambulanceDriverSchema.methods.isPasswordCorrect = async function (
+  candidatePassword
+) {
+  try {
+    console.log("Password check debug:");
+    console.log("Input password:", candidatePassword);
+    console.log("Stored hashed password:", this.password);
+
+    // Try to decode hash (for debugging only - remove in production)
+    const isValid = await bcrypt.compare(candidatePassword, this.password);
+    console.log("Password match result:", isValid);
+
+    return isValid;
+  } catch (error) {
+    console.error("Password verification error:", error);
+    return false;
+  }
 };
 
 const AmbulanceDriver = mongoose.model(

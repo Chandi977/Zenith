@@ -1,5 +1,8 @@
 import express from "express";
-import { generatePath } from "../controllers/route.controllers.js";
+import {
+  generatePath,
+  calculateDistance,
+} from "../controllers/route.controllers.js";
 import {
   assignAmbulanceDriver,
   handleRerouting,
