@@ -5,41 +5,48 @@ const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 // Function to calculate distance between two locations
 const calculateDistance = (location1, location2) => {
   try {
-    // Input validation
-    if (
-      !location1?.latitude ||
-      !location1?.longitude ||
-      !location2?.latitude ||
-      !location2?.longitude
-    ) {
-      throw new Error("Invalid location coordinates");
+    // Validate location objects
+    if (!location1 || !location2) {
+      throw new Error("Both locations are required");
     }
 
-    // Constants and helper function
-    const R = 6371; // Earth's radius in km
-    const toRadians = (degrees) => (degrees * Math.PI) / 180;
+    // Handle different location object structures
+    const lat1 = Number(location1.latitude || location1.lat || 0);
+    const lon1 = Number(location1.longitude || location1.lng || 0);
+    const lat2 = Number(location2.latitude || location2.lat || 0);
+    const lon2 = Number(location2.longitude || location2.lng || 0);
 
-    // Convert coordinates to radians first
-    const lat1 = toRadians(location1.latitude);
-    const lat2 = toRadians(location2.latitude);
-    const lon1 = toRadians(location1.longitude);
-    const lon2 = toRadians(location2.longitude);
+    // Validate coordinates
+    if (!lat1 || !lon1 || !lat2 || !lon2) {
+      throw new Error("Invalid coordinates in location objects");
+    }
 
-    // Calculate differences after conversion
-    const dLat = lat2 - lat1;
-    const dLon = lon2 - lon1;
+    // Earth's radius in kilometers
+    const R = 6371;
 
-    // Haversine formula
+    // Convert coordinates to radians
+    const toRad = (value) => (value * Math.PI) / 180;
+
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      Math.cos(toRad(lat1)) *
+        Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
 
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const distance = R * c; // Distance in km
+    const distance = R * c;
 
     return Number(distance.toFixed(2));
   } catch (error) {
-    console.error("Error calculating distance:", error);
+    console.error("Distance calculation error:", {
+      location1,
+      location2,
+      error: error.message,
+    });
     throw new Error("Failed to calculate distance between locations");
   }
 };
