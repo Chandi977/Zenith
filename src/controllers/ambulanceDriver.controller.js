@@ -11,7 +11,8 @@ import { calculateDistance } from "./route.controllers.js"; // Import calculateD
 import SOS from "../models/sos.model.js"; // Import the SOS model
 import { sendNotification } from "../utils/sendNotification.js"; // Import the sendNotification function
 import Hospital from "../models/hospital.models.js"; // Import the Hospital model
-import { verifyOTPProgrammatically } from "./otp.controller.js"; // Import verifyOTPProgrammatically
+import { ApiResponse } from "../utils/ApiResponse.js";
+import { verifyOTPProgrammatically } from "./otp.controller.js";
 import { getAddressCoordinates } from "../utils/googleMaps.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js"; // Change to named import
@@ -22,150 +23,13 @@ const sosEventEmitter = new EventEmitter(); // Create an event emitter instance
 // Create a new ambulance driver
 const createAmbulanceDriver = async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const {
       driverName,
-      contactNumber,
-      age,
-      rating,
-      drivingExperience,
-      govtIdNumber,
-      available,
-      assignedShift,
       email,
       password,
-      otp,
-      longitude,
-      latitude,
-      hospital, // Hospital name
-      ...otherFields
-    } = req.body;
-
-    // Normalize hospital name for consistent matching
-    const normalizedHospital =
-      typeof hospital === "string" ? hospital.trim().toLowerCase() : hospital;
-
-    // Log the normalized hospital value for debugging
-    console.log("Normalized hospital value from request:", normalizedHospital);
-
-    // Check required fields dynamically
-    const requiredFields = [
-      "driverName",
-      "contactNumber",
-      "age",
-      "drivingExperience",
-      "govtIdNumber",
-      "assignedShift",
-      "email",
-      "password",
-      "longitude",
-      "latitude",
-      "otp",
-      // "hospital",
-    ];
-
-    for (const field of requiredFields) {
-      if (!req.body[field]) {
-        return res.status(400).json({ message: `${field} is required` });
-      }
-    }
-
-    if (available == null) {
-      return res
-        .status(400)
-        .json({ message: "Availability status is required" });
-    }
-
-    // Check if driver already exists
-    const existingDriver = await AmbulanceDriver.findOne({
-      $or: [{ contactNumber }, { govtIdNumber }, { email }],
-    });
-
-    if (existingDriver) {
-      return res.status(400).json({
-        message: "Driver already registered with the provided details.",
-      });
-    }
-
-    /* Temporarily disabled hospital validation
-    // Fetch hospital data using the utility function
-    const hospitals = await getAddressCoordinates(hospital);
-
-    // Find the hospital by normalized name only
-    const hospitalExists = hospitals.find((h) =>
-      h.name
-        .replace(/[,]/g, "")
-        .includes(normalizedHospital.replace(/[,]/g, "").toLowerCase())
-    );
-
-    if (!hospitalExists) {
-      console.error(`Hospital not found for query: ${normalizedHospital}`);
-      return res.status(404).json({
-        message: `Hospital not found. Please ensure the hospital name is correct. Provided value: ${hospital}`,
-        suggestions: [
-          "Verify that the hospital name is correct.",
-          "Ensure the hospital exists in the specified location.",
-        ],
-      });
-    }
-
-    // Check if the hospital exists in the database
-    let hospitalDocument = await Hospital.findOne({
-      placeId: hospitalExists.id,
-    });
-    if (!hospitalDocument) {
-      // If not, create a new hospital document
-      hospitalDocument = await Hospital.create({
-        name: hospitalExists.name,
-        address: hospitalExists.address,
-        phone: "Not available", // Placeholder, as phone is not provided by Google Maps API
-        email: `${hospitalExists.name.replace(/\s+/g, "").toLowerCase()}@example.com`, // Placeholder email
-        placeId: hospitalExists.id,
-        location: {
-          latitude: hospitalExists.location.lat,
-          longitude: hospitalExists.location.lng,
-        },
-        rating: hospitalExists.rating,
-      });
-    }
-    */
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const files = req.files;
-    if (!files?.driverLicense || !files?.govtIdProof || !files?.driverPhoto) {
-      return res
-        .status(400)
-        .json({ message: "All required documents must be uploaded" });
-    }
-
-    // Upload documents to Cloudinary
-    const uploadPromises = [
-      uploadOnCloudinary(files.driverLicense[0].buffer, "driverLicense"),
-      uploadOnCloudinary(files.govtIdProof[0].buffer, "govtIdProof"),
-      uploadOnCloudinary(files.driverPhoto[0].buffer, "driverPhoto"),
-    ];
-
-    const [driverLicense, govtIdProof, driverPhoto] =
-      await Promise.all(uploadPromises);
-
-    await verifyOTPProgrammatically(email, otp);
-
-    // Create new driver instance without hospital reference
-    const newDriver = new AmbulanceDriver({
-      userId: `DR${Date.now()}`,
-      driverName,
       contactNumber,
-      email,
-      password: hashedPassword,
       driverLicense,
       age,
-      rating,
       drivingExperience,
       govtIdProof,
       govtIdNumber,
@@ -173,18 +37,92 @@ const createAmbulanceDriver = async (req, res) => {
       available,
       assignedShift,
       latitude,
-      longitude, // Save driver's location
-      // hospital field removed
+      longitude,
+      otp,
+    } = req.body;
+
+    // Enhanced validation with specific error messages
+    const requiredFields = {
+      driverName,
+      email,
+      password,
+      contactNumber,
+      age,
+      drivingExperience,
+      govtIdNumber,
+      assignedShift,
+      latitude,
+      longitude,
+      otp,
+    };
+    console.log(req.body);
+
+    // Check all required fields
+    const missingFields = Object.entries(requiredFields)
+      .filter(([_, value]) => !value)
+      .map(([key]) => key);
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        message: "Missing required fields",
+        missingFields,
+      });
+    }
+
+    // Validate numeric fields
+    if (age < 18) {
+      return res.status(400).json({
+        message: "Driver must be at least 18 years old",
+      });
+    }
+
+    if (drivingExperience < 0 || drivingExperience > 99) {
+      return res.status(400).json({
+        message: "Driving experience must be between 0 and 99 years",
+      });
+    }
+
+    // Hash password once during registration
+    const hashedPassword = await bcrypt.hash(password, 10);
+    console.log("\nRegistration Debug:");
+    console.log("Password hashed once");
+
+    // Create new driver with all required fields
+    const newDriver = new AmbulanceDriver({
+      driverName,
+      email,
+      password: hashedPassword,
+      contactNumber,
+      age,
+      drivingExperience,
+      govtIdNumber,
+      available: available ?? true,
+      assignedShift,
+      latitude,
+      longitude,
     });
 
     await newDriver.save();
 
+    // Remove sensitive data from response
+    const createdDriver = newDriver.toObject();
+    delete createdDriver.password;
+
     return res.status(201).json({
       message: "Ambulance driver created successfully",
-      driver: newDriver.toObject(),
+      driver: createdDriver,
     });
   } catch (error) {
-    console.error("Driver Upload Error:", error.stack);
+    console.error("Driver registration error:", error);
+
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(409).json({
+        message: `${field} already exists`,
+      });
+    }
+
     return res.status(500).json({
       message: "Error creating ambulance driver",
       error: error.message,
@@ -195,31 +133,69 @@ const createAmbulanceDriver = async (req, res) => {
 const loginAmbulanceDriver = asyncHandler(async (req, res) => {
   const { email, password, otp } = req.body;
 
-  if (!email || !password || !otp) {
-    throw new ApiError(400, "Email/Username, Password, and OTP are required");
+  try {
+    // Input validation
+    if (!email || !password || !otp) {
+      throw new ApiError(400, "Email, password, and OTP are required");
+    }
+
+    // Find driver
+    const driver = await AmbulanceDriver.findOne({ email })
+      .select("+password")
+      .exec();
+
+    if (!driver) {
+      throw new ApiError(401, "Invalid credentials");
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, driver.password);
+
+    if (!isPasswordValid) {
+      throw new ApiError(401, "Invalid credentials");
+    }
+
+    // Verify OTP with userType
+    await verifyOTPProgrammatically(email, otp, "driver");
+
+    // Generate tokens
+    const { accessToken, refreshToken } =
+      await generateAccessAndRefreshTokens(driver);
+
+    // Get driver without sensitive data
+    const loggedInDriver = driver.toObject();
+    delete loggedInDriver.password;
+    delete loggedInDriver.refreshToken;
+
+    // Set cookies and send response
+    return res
+      .status(200)
+      .cookie("accessToken", accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+      })
+      .cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+      })
+      .json(
+        new ApiResponse(
+          200,
+          {
+            driver: loggedInDriver,
+            accessToken,
+            refreshToken,
+          },
+          "Login successful"
+        )
+      );
+  } catch (error) {
+    console.error("Login failed:", error);
+    throw new ApiError(
+      error.statusCode || 401,
+      error.message || "Authentication failed"
+    );
   }
-
-  const driver = await AmbulanceDriver.findOne({ email });
-  if (!driver) {
-    throw new ApiError(401, "driver does not exist");
-  }
-
-  const isPasswordValid = await driver.isPasswordCorrect(password);
-  if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid credentials");
-  }
-
-  // Use the helper function to verify OTP
-  await verifyOTPProgrammatically(email || driver.email, otp);
-
-  const { accessToken, refreshToken } =
-    await generateAccessAndRefreshTokens(driver);
-
-  return res
-    .status(200)
-    .cookie("accessToken", accessToken, { httpOnly: true })
-    .cookie("refreshToken", refreshToken, { httpOnly: true })
-    .json(new ApiResponse(200, user, "Login successful"));
 });
 
 // const loginAmbulanceDriver = asyncHandler(async (req, res) => {
@@ -873,6 +849,22 @@ const getDistanceTime = async (origin, destination) => {
   return { distance, duration };
 };
 
+const generateAccessAndRefreshTokens = async (driver) => {
+  try {
+    const accessToken = driver.generateAccessToken();
+    const refreshToken = driver.generateRefreshToken();
+
+    // Save refresh token to driver document
+    driver.refreshToken = refreshToken;
+    await driver.save({ validateBeforeSave: false });
+
+    return { accessToken, refreshToken };
+  } catch (error) {
+    console.error("Token generation error:", error);
+    throw new ApiError(500, "Error generating authentication tokens");
+  }
+};
+
 export {
   createAmbulanceDriver,
   loginAmbulanceDriver,
@@ -891,4 +883,5 @@ export {
   getDistanceTime,
   updateDriverLocation, // Export the new function
   handleRerouting,
+  generateAccessAndRefreshTokens,
 };

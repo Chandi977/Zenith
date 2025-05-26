@@ -1,7 +1,10 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken"; // Import jwt for token generation
 
-const ambulanceDriverSchema = new mongoose.Schema(
+const { Schema } = mongoose;
+
+const ambulanceDriverSchema = new Schema(
   {
     driverName: { type: String, required: true },
     email: {
@@ -10,19 +13,24 @@ const ambulanceDriverSchema = new mongoose.Schema(
       unique: true,
       match: [/^\S+@\S+\.\S+$/, "Please enter a valid email address"],
     },
-    password: { type: String, required: true, minlength: 6 },
+    password: {
+      type: String,
+      required: [true, "Password is required"],
+      minlength: [8, "Password must be at least 8 characters"],
+      select: false, // Important: This makes password excluded by default
+    },
     contactNumber: {
       type: String,
       required: true,
       unique: true,
       match: [/^\d{10}$/, "Please enter a valid 10-digit contact number"],
     },
-    driverLicense: { type: String, required: true },
+    // driverLicense: { type: String, required: true },
     age: { type: Number, required: true, min: 18 },
     drivingExperience: { type: Number, required: true, min: 0, max: 99 },
-    govtIdProof: { type: String, required: true },
+    // govtIdProof: { type: String, required: true },
     govtIdNumber: { type: String, required: true },
-    driverPhoto: { type: String, required: true },
+    // driverPhoto: { type: String, required: true },
     available: { type: Boolean, default: true }, // Initially available
     ambulance: {
       type: mongoose.Schema.Types.ObjectId,
@@ -62,38 +70,76 @@ ambulanceDriverSchema.virtual("averageRating").get(function () {
         this.userRatings.length;
 });
 
-ambulanceDriverSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
-  try {
-    console.log("Original password before hash:", this.password);
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    console.log("Password after hashing:", this.password);
-    next();
-  } catch (error) {
-    console.error("Password hashing error:", error);
-    next(error);
-  }
-});
+// Remove or comment out the pre-save middleware to prevent double hashing
+// ambulanceDriverSchema.pre("save", async function (next) {...});
 
-ambulanceDriverSchema.methods.isPasswordCorrect = async function (
-  candidatePassword
-) {
+// Fix the password verification method
+ambulanceDriverSchema.methods.isPasswordCorrect = async function (password) {
   try {
-    console.log("Password check debug:");
-    console.log("Input password:", candidatePassword);
-    console.log("Stored hashed password:", this.password);
+    console.log("\nDriver Password Verification Debug:");
+    console.log("Input password length:", password?.length);
+    console.log("Stored hash length:", this.password?.length);
 
-    // Try to decode hash (for debugging only - remove in production)
-    const isValid = await bcrypt.compare(candidatePassword, this.password);
-    console.log("Password match result:", isValid);
+    if (!password || !this.password) {
+      throw new Error("Missing password or hash");
+    }
+
+    // Use bcrypt.compare directly
+    const isValid = await bcrypt.compare(password, this.password);
+    console.log("Password verification result:", isValid);
 
     return isValid;
   } catch (error) {
-    console.error("Password verification error:", error);
+    console.error("Password verification failed:", error.message);
     return false;
   }
 };
+
+// Add token generation methods
+ambulanceDriverSchema.methods.generateAccessToken = function () {
+  try {
+    const accessToken = jwt.sign(
+      {
+        _id: this._id,
+        email: this.email,
+        driverName: this.driverName,
+        role: "DRIVER",
+      },
+      process.env.ACCESS_TOKEN_SECRET,
+      {
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
+      }
+    );
+    return accessToken;
+  } catch (error) {
+    throw new Error("Error generating access token");
+  }
+};
+
+ambulanceDriverSchema.methods.generateRefreshToken = function () {
+  try {
+    const refreshToken = jwt.sign(
+      {
+        _id: this._id,
+      },
+      process.env.REFRESH_TOKEN_SECRET,
+      {
+        expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
+      }
+    );
+    return refreshToken;
+  } catch (error) {
+    throw new Error("Error generating refresh token");
+  }
+};
+
+// Add refreshToken field to schema
+ambulanceDriverSchema.add({
+  refreshToken: {
+    type: String,
+    select: false,
+  },
+});
 
 const AmbulanceDriver = mongoose.model(
   "AmbulanceDriver",

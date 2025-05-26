@@ -10,6 +10,7 @@ import {
   sendOTP, // Sends OTP to user email (Public API) => POST /api/users/send-otp
   refreshTokens, // Refreshes authentication tokens (Public API) => POST /api/users/refresh-tokens
   sendSOSRequest, // Use the comprehensive SOS request function
+  verifyOTP, // Verify OTP for password reset (Public API) => POST /api/users/verify-otp
 } from "../controllers/user.controllers.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { upload } from "../middlewares/multer.middleware.js"; // Import Multer middleware
@@ -23,6 +24,7 @@ router.post("/logout", logoutUser); // User logout
 router.post("/send-otp", sendOTP); // Send OTP to email
 router.post("/reset-password", resetPassword); // Reset password via OTP
 router.post("/refresh-tokens", refreshTokens); // Refresh JWT tokens
+router.post("/verify-otp", verifyOTP); // Verify OTP for password reset
 
 // Protected Routes (Require Authentication)
 router.get("/me", verifyJWT, getCurrentUser); // Fetch current logged-in user data
