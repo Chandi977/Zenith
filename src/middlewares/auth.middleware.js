@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken"; // Importing jsonwebtoken to verify JWTs.
 import { User } from "../models/user.model.js"; // Importing the User model to query user data from the database.
 
 // Middleware to verify the JWT token and authenticate the user
-const verifyJWT = asyncHandler(async (req, res, next) => {
+export const verifyJWT = asyncHandler(async (req, res, next) => {
   try {
     // Extracting the token from cookies or Authorization header
     const token =
@@ -46,5 +46,3 @@ const verifyJWT = asyncHandler(async (req, res, next) => {
     });
   }
 });
-
-export { verifyJWT }; // Exporting the verifyJWT middleware for use in routes

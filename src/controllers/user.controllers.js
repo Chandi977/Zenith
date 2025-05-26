@@ -30,7 +30,7 @@ const registerUser = asyncHandler(async (req, res) => {
   const { fullName, email, username, password, address, mobileNumber, otp } =
     req.body;
 
-  // Validate required fields
+  // Validation
   if (!fullName || !email || !username || !password || !otp) {
     throw new ApiError(
       400,
@@ -38,46 +38,32 @@ const registerUser = asyncHandler(async (req, res) => {
     );
   }
 
-  // Check for existing user
+  // Check existing user
   const existingUser = await User.findOne({ $or: [{ email }, { username }] });
   if (existingUser) {
     throw new ApiError(409, "User already exists");
   }
 
-  // Verify OTP
+  // Verify OTP first
   await verifyOTPProgrammatically(email, otp);
 
-  // Handle profile image upload
-  let avatarUrl = "";
-  if (req.file) {
-    const cloudinaryResponse = await uploadOnCloudinary(
-      req.file.buffer,
-      "user-profiles"
-    );
-    if (!cloudinaryResponse) {
-      throw new ApiError(400, "Error uploading profile image");
-    }
-    avatarUrl = cloudinaryResponse;
-  }
+  // Hash password once during registration
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(password, salt);
 
-  // Hash password
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  // Create user with avatar
+  // Create user with hashed password
   const user = await User.create({
     fullName,
     email,
     username: username.toLowerCase(),
-    password: hashedPassword,
+    password: hashedPassword, // Store hashed password
     address: address || "",
     mobileNumber: mobileNumber || "",
-    avatar: avatarUrl,
   });
 
-  // Remove sensitive information
+  // Remove password from response
   const createdUser = user.toObject();
   delete createdUser.password;
-  delete createdUser.refreshToken;
 
   return res
     .status(201)
@@ -87,34 +73,67 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
   const { email, username, password, otp } = req.body;
 
-  if ((!email && !username) || !password || !otp) {
-    throw new ApiError(400, "Email/Username, Password, and OTP are required");
+  // Enhanced validation
+  if (!password) {
+    throw new ApiError(400, "Password is required");
   }
 
-  const user = await User.findOne({ $or: [{ email }, { username }] });
+  // Find user with password explicitly selected
+  const user = await User.findOne({
+    $or: [{ email }, { username }],
+  }).select("+password");
+
   if (!user) {
-    throw new ApiError(401, "User does not exist");
+    throw new ApiError(401, "User not found");
   }
 
-  const isPasswordValid = await user.isPasswordCorrect(password);
-  if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid credentials");
+  // Debug log to check password and hash
+  console.log("Login Debug:", {
+    hasPassword: Boolean(password),
+    hasHashedPassword: Boolean(user.password),
+    passwordLength: password?.length,
+    hashLength: user.password?.length,
+  });
+
+  // Validate that both password and hash exist
+  if (!password || !user.password) {
+    throw new ApiError(500, "Password verification failed - missing data");
   }
 
-  // Use the helper function to verify OTP
-  await verifyOTPProgrammatically(email || user.email, otp);
+  // Compare password directly with stored hash
+  try {
+    const isPasswordValid = await bcrypt.compare(password, user.password);
 
-  const { accessToken, refreshToken } =
-    await generateAccessAndRefreshTokens(user);
+    if (!isPasswordValid) {
+      throw new ApiError(401, "Invalid credentials");
+    }
 
-  const loggedInUser = await User.findById(user._id).select(
-    "-password -refreshToken -accessToken"
-  );
-  return res
-    .status(200)
-    .cookie("accessToken", accessToken, { httpOnly: true })
-    .cookie("refreshToken", refreshToken, { httpOnly: true })
-    .json(new ApiResponse(200, user, "Login successful"));
+    // Continue with OTP verification and token generation...
+    await verifyOTPProgrammatically(email || user.email, otp);
+
+    const { accessToken, refreshToken } =
+      await generateAccessAndRefreshTokens(user);
+
+    // Get user without sensitive data
+    const loggedInUser = await User.findById(user._id).select(
+      "-password -refreshToken -accessToken"
+    );
+
+    return res
+      .status(200)
+      .cookie("accessToken", accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+      })
+      .cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+      })
+      .json(new ApiResponse(200, loggedInUser, "Login successful"));
+  } catch (error) {
+    console.error("Password verification failed:", error);
+    throw new ApiError(401, "Authentication failed");
+  }
 });
 
 const resetPassword = asyncHandler(async (req, res) => {
@@ -359,6 +378,28 @@ const sendSOSRequest = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, sosRequest, "SOS request sent successfully"));
 });
 
+// Example of correct password update
+const updatePassword = asyncHandler(async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+
+  // Find user with password
+  const user = await User.findById(req.user._id).select("+password");
+
+  // Verify old password
+  const isPasswordValid = await user.isPasswordCorrect(oldPassword);
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Invalid old password");
+  }
+
+  // Set new password (will be hashed by pre-save middleware)
+  user.password = newPassword;
+  await user.save(); // This triggers the pre-save middleware
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Password updated successfully"));
+});
+
 export {
   registerUser,
   loginUser,
@@ -371,4 +412,5 @@ export {
   refreshTokens,
   sendSOSRequest, // Use sendSOSRequest for SOS functionality
   verifyOTP,
+  updatePassword,
 };

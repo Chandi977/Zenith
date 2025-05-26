@@ -17,7 +17,7 @@ import { upload } from "../middlewares/multer.middleware.js"; // Import Multer m
 const router = express.Router();
 
 // Public Routes (No authentication required)
-router.post("/register", upload.single("avatar"), registerUser); // Register a new user
+router.post("/register", registerUser); // Register a new user
 router.post("/login", loginUser); // User login
 router.post("/logout", logoutUser); // User logout
 router.post("/send-otp", sendOTP); // Send OTP to email
@@ -33,12 +33,6 @@ router.post(
   upload.single("avatar"), // Use Multer middleware to handle single file upload
   uploadUserPhoto
 ); // Upload user profile photo
-router.patch(
-  "/update-photo",
-  verifyJWT,
-  upload.single("avatar"), // Use Multer middleware to handle single file upload
-  uploadUserPhoto
-); // Update user profile photo
 
 // SOS Routes
 router.post("/send-sos", verifyJWT, sendSOSRequest); // Send SOS message using sendSOSRequest

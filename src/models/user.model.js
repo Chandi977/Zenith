@@ -34,6 +34,9 @@ const userSchema = new Schema(
     password: {
       type: String, // Field type is String
       required: [true, "Password is required"], // Custom error message if the field is missing
+      minlength: [8, "Password must be at least 8 characters"], // Minimum length validation
+      maxlength: [72, "Password must not exceed 72 characters"], // Maximum length validation (bcrypt limit)
+      select: false, // Don't include password in queries by default
     },
     refreshToken: {
       type: String, // Field type is String for storing refresh token
@@ -55,17 +58,35 @@ const userSchema = new Schema(
   { timestamps: true } // Adding timestamps (createdAt and updatedAt) to the schema
 );
 
-// Middleware to hash the password before saving the user document
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next(); // Proceed if password is not modified
+// Middleware to hash the password ONLY on creation or password modification
+// Remove or comment out the password hashing middleware
+// userSchema.pre("save", async function(next) {
+//   if (!this.isModified("password")) return next();
+//   try {
+//     const salt = await bcrypt.genSalt(10);
+//     this.password = await bcrypt.hash(this.password, salt);
+//     next();
+//   } catch (error) {
+//     next(error);
+//   }
+// });
 
-  this.password = await bcrypt.hash(this.password, 10); // Hash the password with a salt rounds of 10
-  next(); // Proceed to the next middleware or save the document
-});
-
-// Method to compare a provided password with the hashed password stored in the database
+// Update password verification method with better error handling
 userSchema.methods.isPasswordCorrect = async function (password) {
-  return await bcrypt.compare(password, this.password); // Compare provided password with stored hashed password
+  try {
+    if (!password || !this.password) {
+      console.error("Missing password data:", {
+        hasInputPassword: Boolean(password),
+        hasStoredHash: Boolean(this.password),
+      });
+      return false;
+    }
+
+    return await bcrypt.compare(password, this.password);
+  } catch (error) {
+    console.error("Password verification error:", error);
+    return false;
+  }
 };
 
 // Method to generate a JWT access token
