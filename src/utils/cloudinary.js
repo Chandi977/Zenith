@@ -1,5 +1,5 @@
 import { v2 as cloudinary } from "cloudinary";
-import { Readable } from "stream";
+import { ApiError } from "./ApiError.js";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -7,26 +7,30 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Function to upload buffer to Cloudinary
-const uploadOnCloudinary = async (buffer, folder) => {
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: "auto" },
-      (error, result) => {
-        if (error) {
-          console.error("Cloudinary upload error:", error);
-          reject(error);
-        } else {
-          resolve(result.secure_url);
-        }
-      }
-    );
+export const uploadOnCloudinary = async (buffer, folder = "profiles") => {
+  try {
+    if (!buffer) return null;
 
-    const readableStream = new Readable();
-    readableStream.push(buffer); // Push the buffer to the readable stream
-    readableStream.push(null); // End the stream
-    readableStream.pipe(uploadStream); // Pipe the stream to Cloudinary
-  });
+    const uploadResponse = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: `zenith/${folder}`,
+          resource_type: "auto",
+        },
+        (error, result) => {
+          if (error) reject(error);
+          resolve(result);
+        }
+      );
+
+      uploadStream.end(buffer);
+    });
+
+    return uploadResponse.secure_url;
+  } catch (error) {
+    console.error("Cloudinary upload error:", error);
+    throw new ApiError(500, "Error uploading file to Cloudinary");
+  }
 };
 
 // Function to remove a file from Cloudinary
@@ -41,4 +45,4 @@ const removeFromCloudinary = async (publicId) => {
   }
 };
 
-export { uploadOnCloudinary, removeFromCloudinary };
+export { removeFromCloudinary };

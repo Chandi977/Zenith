@@ -30,6 +30,7 @@ const registerUser = asyncHandler(async (req, res) => {
   const { fullName, email, username, password, address, mobileNumber, otp } =
     req.body;
 
+  // Validate required fields
   if (!fullName || !email || !username || !password || !otp) {
     throw new ApiError(
       400,
@@ -37,26 +38,50 @@ const registerUser = asyncHandler(async (req, res) => {
     );
   }
 
+  // Check for existing user
   const existingUser = await User.findOne({ $or: [{ email }, { username }] });
   if (existingUser) {
     throw new ApiError(409, "User already exists");
   }
 
-  // Use the helper function to verify OTP
+  // Verify OTP
   await verifyOTPProgrammatically(email, otp);
 
+  // Handle profile image upload
+  let avatarUrl = "";
+  if (req.file) {
+    const cloudinaryResponse = await uploadOnCloudinary(
+      req.file.buffer,
+      "user-profiles"
+    );
+    if (!cloudinaryResponse) {
+      throw new ApiError(400, "Error uploading profile image");
+    }
+    avatarUrl = cloudinaryResponse;
+  }
+
+  // Hash password
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  // Create user with avatar
   const user = await User.create({
     fullName,
     email,
     username: username.toLowerCase(),
-    password,
+    password: hashedPassword,
     address: address || "",
     mobileNumber: mobileNumber || "",
+    avatar: avatarUrl,
   });
+
+  // Remove sensitive information
+  const createdUser = user.toObject();
+  delete createdUser.password;
+  delete createdUser.refreshToken;
 
   return res
     .status(201)
-    .json(new ApiResponse(201, user, "User registered successfully"));
+    .json(new ApiResponse(201, createdUser, "User registered successfully"));
 });
 
 const loginUser = asyncHandler(async (req, res) => {

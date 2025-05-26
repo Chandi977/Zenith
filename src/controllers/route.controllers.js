@@ -1,12 +1,14 @@
-import { getDirections } from "../utils/googleMaps.js";
+import { getDirections, findNearestHospital } from "../utils/googleMaps.js";
 import Route from "../models/route.model.js";
+import Hospital from "../models/hospital.models.js";
+import { ApiError } from "../utils/ApiError.js";
 
 const getRoutes = (req, res) => {
   res.status(200).json({ message: "Route controller is under construction." });
 };
 
 // Calculate distance between two locations
-export const calculateDistance = (location1, location2) => {
+const calculateDistance = (location1, location2) => {
   try {
     // Input validation
     if (
@@ -67,38 +69,125 @@ export const generatePath = (startPoint, endPoint) => {
 };
 
 const generatePathData = async (assignedDriver, location) => {
-  const ambulanceToPatient = await getDirections(
-    {
-      latitude: assignedDriver.latitude,
-      longitude: assignedDriver.longitude,
-    },
-    location
-  );
+  try {
+    // Get nearest hospitals within 10km radius
+    const nearbyHospitals = await Hospital.find({
+      location: {
+        $near: {
+          $geometry: {
+            type: "Point",
+            coordinates: [location.longitude, location.latitude],
+          },
+          $maxDistance: 10000, // 10km radius
+        },
+      },
+    }).limit(3); // Get top 3 nearest hospitals
 
-  // Removed nearestHospital logic
-  const patientToHospital = await getDirections(location, {
-    latitude: 0, // Placeholder latitude
-    longitude: 0, // Placeholder longitude
-  });
+    let bestRoute = null;
+    let selectedHospital = null;
+    let lowestTrafficScore = Infinity;
 
-  // Save route data to MongoDB
-  const route = new Route({
-    startPoint: location,
-    endPoint: { latitude: 0, longitude: 0 }, // Placeholder endPoint
-    waypoints: patientToHospital.legs[0].steps.map((step) => ({
-      latitude: step.start_location.lat,
-      longitude: step.start_location.lng,
-      traffic: "moderate", // Placeholder, replace with actual traffic data
-    })),
-    estimatedTime: patientToHospital.legs[0].duration.text,
-  });
-  await route.save();
+    // Check routes to each hospital
+    for (const hospital of nearbyHospitals) {
+      // Get route from patient to hospital
+      const patientToHospital = await getDirections(location, {
+        latitude: hospital.location.latitude,
+        longitude: hospital.location.longitude,
+      });
 
-  return {
-    ambulanceToPatient,
-    patientToHospital,
-    nearestHospital: { location: { lat: 0, lng: 0 } }, // Placeholder nearestHospital
-  };
+      // Calculate traffic score
+      const trafficScore = patientToHospital.legs[0].steps.reduce(
+        (score, step) => {
+          const stepTraffic = step.traffic || "low";
+          const trafficWeight = {
+            low: 1,
+            moderate: 2,
+            high: 3,
+            severe: 4,
+          };
+          return score + trafficWeight[stepTraffic];
+        },
+        0
+      );
+
+      // If this route has less traffic, update best route
+      if (trafficScore < lowestTrafficScore) {
+        lowestTrafficScore = trafficScore;
+        bestRoute = patientToHospital;
+        selectedHospital = hospital;
+      }
+    }
+
+    // Get route from ambulance to patient
+    const ambulanceToPatient = await getDirections(
+      {
+        latitude: assignedDriver.latitude,
+        longitude: assignedDriver.longitude,
+      },
+      location
+    );
+
+    // Create detailed route object
+    const route = new Route({
+      startPoint: {
+        type: "Point",
+        coordinates: [location.longitude, location.latitude],
+        address: bestRoute.legs[0].start_address,
+      },
+      endPoint: {
+        type: "Point",
+        coordinates: [
+          selectedHospital.location.longitude,
+          selectedHospital.location.latitude,
+        ],
+        address: bestRoute.legs[0].end_address,
+      },
+      hospitalId: selectedHospital._id,
+      driverId: assignedDriver._id,
+      waypoints: bestRoute.legs[0].steps.map((step) => ({
+        location: {
+          type: "Point",
+          coordinates: [step.start_location.lng, step.start_location.lat],
+        },
+        instruction: step.html_instructions,
+        distance: step.distance.text,
+        duration: step.duration.text,
+        traffic: step.traffic || "moderate",
+      })),
+      alternateRoutes: nearbyHospitals
+        .filter((h) => h._id !== selectedHospital._id)
+        .map((h) => ({
+          hospitalId: h._id,
+          hospitalName: h.name,
+          estimatedTime: calculateETA(location, h.location),
+          traffic: "moderate", // You can fetch actual traffic data here
+        })),
+      estimatedTime: bestRoute.legs[0].duration.text,
+      totalDistance: bestRoute.legs[0].distance.text,
+      trafficSeverity: lowestTrafficScore > 10 ? "high" : "moderate",
+      status: "active",
+    });
+
+    await route.save();
+
+    return {
+      ambulanceToPatient,
+      patientToHospital: bestRoute,
+      selectedHospital: {
+        id: selectedHospital._id,
+        name: selectedHospital.name,
+        location: selectedHospital.location,
+        contact: selectedHospital.contact,
+      },
+      alternateRoutes: route.alternateRoutes,
+      routeId: route._id,
+      trafficSeverity: route.trafficSeverity,
+      navigationLink: `https://www.google.com/maps/dir/${location.latitude},${location.longitude}/${selectedHospital.location.latitude},${selectedHospital.location.longitude}`,
+    };
+  } catch (error) {
+    console.error("Route generation error:", error);
+    throw new ApiError(500, "Failed to generate route", error);
+  }
 };
 
-export { getRoutes, generatePathData };
+export { getRoutes, generatePathData, calculateDistance };
