@@ -53,6 +53,7 @@ import healthcheckRouter from "./routes/healthcheck.routes.js";
 import ambulanceRouter from "./routes/ambulance.routes.js";
 import ambulanceDriver from "./routes/ambulanceDriver.routes.js";
 import hospitalRouter from "./routes/hospital.routes.js";
+import routeRoutes from "./routes/route.routes.js";
 
 // ✅ Firebase Admin SDK Init
 admin.initializeApp({
@@ -66,6 +67,7 @@ app.use("/api/v1/otp", otpRoutes);
 app.use("/api/v1/ambulance", ambulanceRouter);
 app.use("/api/v1/ambulanceDriver", ambulanceDriver);
 app.use("/api/v1/hospital", hospitalRouter);
+app.use("/api/v1/routes", routeRoutes);
 
 // ✅ 404 Fallback
 app.use((req, res) => {

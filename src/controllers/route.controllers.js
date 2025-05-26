@@ -2,6 +2,7 @@ import { getDirections, findNearestHospital } from "../utils/googleMaps.js";
 import Route from "../models/route.model.js";
 import Hospital from "../models/hospital.models.js";
 import { ApiError } from "../utils/ApiError.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
 const getRoutes = (req, res) => {
   res.status(200).json({ message: "Route controller is under construction." });
@@ -50,7 +51,7 @@ const calculateDistance = (location1, location2) => {
 };
 
 // Generate a path between two points
-export const generatePath = (startPoint, endPoint) => {
+const generatePath = (startPoint, endPoint) => {
   // Validate inputs
   if (!startPoint || !endPoint) {
     throw new Error("Start and end points are required");
@@ -190,4 +191,183 @@ const generatePathData = async (assignedDriver, location) => {
   }
 };
 
-export { getRoutes, generatePathData, calculateDistance };
+const createRoute = asyncHandler(async (req, res) => {
+  const { startPoint, endPoint, hospitalId, driverId } = req.body;
+
+  if (!startPoint || !endPoint || !hospitalId || !driverId) {
+    throw new ApiError(400, "Missing required fields");
+  }
+
+  const route = await Route.create({
+    startPoint: {
+      type: "Point",
+      coordinates: [startPoint.longitude, startPoint.latitude],
+      address: startPoint.address,
+    },
+    endPoint: {
+      type: "Point",
+      coordinates: [endPoint.longitude, endPoint.latitude],
+      address: endPoint.address,
+    },
+    hospitalId,
+    driverId,
+    status: "active",
+  });
+
+  return res.status(201).json({
+    success: true,
+    route,
+  });
+});
+
+const getRouteById = asyncHandler(async (req, res) => {
+  const { routeId } = req.params;
+
+  const route = await Route.findById(routeId)
+    .populate("hospitalId", "name location contact")
+    .populate("driverId", "driverName contactNumber");
+
+  if (!route) {
+    throw new ApiError(404, "Route not found");
+  }
+
+  return res.status(200).json({
+    success: true,
+    route,
+  });
+});
+
+const getAllActiveRoutes = asyncHandler(async (req, res) => {
+  const routes = await Route.find({ status: "active" })
+    .populate("hospitalId", "name location contact")
+    .populate("driverId", "driverName contactNumber");
+
+  return res.status(200).json({
+    success: true,
+    routes,
+  });
+});
+
+const updateRouteStatus = asyncHandler(async (req, res) => {
+  const { routeId } = req.params;
+  const { status, sosRequestId } = req.body;
+
+  const route = await Route.findOne({ routeId, sosRequestId });
+  if (!route) {
+    throw new ApiError(404, "Route not found");
+  }
+
+  // Validate status transition
+  const validTransitions = {
+    pending: ["active"],
+    active: ["completed", "cancelled"],
+    completed: [],
+    cancelled: [],
+  };
+
+  if (!validTransitions[route.status].includes(status)) {
+    throw new ApiError(
+      400,
+      `Invalid status transition from ${route.status} to ${status}`
+    );
+  }
+
+  route.status = status;
+  await route.save();
+
+  return res.status(200).json({
+    success: true,
+    data: route,
+  });
+});
+
+const createSOSRoutes = asyncHandler(async (req, res) => {
+  try {
+    const {
+      sosRequestId,
+      userId,
+      driverId,
+      hospitalId,
+      patientLocation,
+      driverLocation,
+      hospitalLocation,
+    } = req.body;
+
+    // Create driver-to-patient route
+    const driverToPatientRoute = await Route.create({
+      sosRequestId,
+      userId,
+      driverId,
+      hospitalId,
+      startPoint: {
+        type: "Point",
+        coordinates: [driverLocation.longitude, driverLocation.latitude],
+      },
+      endPoint: {
+        type: "Point",
+        coordinates: [patientLocation.longitude, patientLocation.latitude],
+      },
+    });
+
+    // Create patient-to-hospital route
+    const patientToHospitalRoute = await Route.create({
+      sosRequestId,
+      userId,
+      driverId,
+      hospitalId,
+      startPoint: {
+        type: "Point",
+        coordinates: [patientLocation.longitude, patientLocation.latitude],
+      },
+      endPoint: {
+        type: "Point",
+        coordinates: [hospitalLocation.longitude, hospitalLocation.latitude],
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        driverToPatient: driverToPatientRoute,
+        patientToHospital: patientToHospitalRoute,
+      },
+    });
+  } catch (error) {
+    throw new ApiError(500, "Error creating SOS routes", error);
+  }
+});
+
+const getSOSRoutes = asyncHandler(async (req, res) => {
+  const { sosRequestId } = req.params;
+
+  if (!sosRequestId) {
+    throw new ApiError(400, "SOS Request ID is required");
+  }
+
+  const routes = await Route.find({ sosRequestId })
+    .populate("hospitalId", "name location contact")
+    .populate("driverId", "driverName contactNumber")
+    .sort("sequence");
+
+  if (!routes || routes.length === 0) {
+    throw new ApiError(404, "No routes found for this SOS request");
+  }
+
+  return res.status(200).json({
+    success: true,
+    data: routes,
+  });
+});
+
+// Update the exports to include getSOSRoutes
+export {
+  getRoutes,
+  generatePathData,
+  calculateDistance,
+  createRoute,
+  getRouteById,
+  updateRouteStatus,
+  getAllActiveRoutes,
+  createSOSRoutes,
+  getSOSRoutes, // Add this line
+};

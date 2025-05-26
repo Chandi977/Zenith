@@ -1,94 +1,82 @@
 import mongoose from "mongoose";
 
-const routeSchema = new mongoose.Schema({
-  startPoint: {
-    type: {
+const routeSchema = new mongoose.Schema(
+  {
+    routeId: {
       type: String,
-      enum: ["Point"],
       required: true,
+      unique: true,
     },
-    coordinates: {
-      type: [Number],
-      required: true,
-    },
-    address: String,
-  },
-  endPoint: {
-    type: {
+    sosRequestId: {
       type: String,
-      enum: ["Point"],
+      required: true,
+      unique: true,
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       required: true,
     },
-    coordinates: {
-      type: [Number],
-      required: true,
-    },
-    address: String,
-  },
-  hospitalId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Hospital",
-    required: true,
-  },
-  driverId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "AmbulanceDriver",
-    required: true,
-  },
-  waypoints: [
-    {
-      location: {
-        type: {
-          type: String,
-          enum: ["Point"],
-          required: true,
-        },
-        coordinates: {
-          type: [Number],
-          required: true,
-        },
-      },
-      instruction: String,
-      distance: String,
-      duration: String,
-      traffic: {
+    startPoint: {
+      type: {
         type: String,
-        enum: ["low", "moderate", "high", "severe"],
-        default: "moderate",
+        enum: ["Point"],
+        required: true,
       },
-    },
-  ],
-  alternateRoutes: [
-    {
-      hospitalId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Hospital",
+      coordinates: {
+        type: [Number],
+        required: true,
       },
-      hospitalName: String,
-      estimatedTime: String,
-      traffic: String,
+      address: String,
     },
-  ],
-  estimatedTime: String,
-  totalDistance: String,
-  trafficSeverity: {
-    type: String,
-    enum: ["low", "moderate", "high", "severe"],
-    default: "moderate",
+    endPoint: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        required: true,
+      },
+      coordinates: {
+        type: [Number],
+        required: true,
+      },
+      address: String,
+    },
+    hospitalId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Hospital",
+      required: true,
+    },
+    driverId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AmbulanceDriver",
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ["pending", "active", "completed", "cancelled"],
+      default: "pending",
+    },
+    routeType: {
+      type: String,
+      enum: ["driver-to-patient", "patient-to-hospital"],
+      required: true,
+    },
+    sequence: {
+      type: Number,
+      required: true,
+    },
   },
-  status: {
-    type: String,
-    enum: ["active", "completed", "cancelled"],
-    default: "active",
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-});
+  { timestamps: true }
+);
 
-// Add indexes for geospatial queries
-routeSchema.index({ startPoint: "2dsphere" });
-routeSchema.index({ endPoint: "2dsphere" });
+// Generate unique route ID
+routeSchema.pre("save", async function (next) {
+  if (this.isNew) {
+    const date = new Date();
+    const timestamp = date.getTime();
+    this.routeId = `RT${timestamp}${Math.floor(Math.random() * 1000)}`;
+  }
+  next();
+});
 
 export default mongoose.model("Route", routeSchema);
