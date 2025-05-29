@@ -77,8 +77,8 @@ const createAmbulanceDriver = async (req, res) => {
 
     // Hash password once during registration
     const hashedPassword = await bcrypt.hash(password, 10);
-    console.log("\nRegistration Debug:");
-    console.log("Password hashed once");
+    // console.log("\nRegistration Debug:");
+    // console.log("Password hashed once");
 
     // Create new driver with all required fields
     const newDriver = new AmbulanceDriver({

@@ -116,7 +116,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
     // Get user without sensitive data
     const loggedInUser = await User.findById(user._id).select(
-      "-password -refreshToken -accessToken"
+      "-password -refreshToken"
     );
 
     return res
