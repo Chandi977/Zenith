@@ -28,22 +28,18 @@ const createAmbulanceDriver = async (req, res) => {
       email,
       password,
       contactNumber,
-      driverLicense,
       age,
       drivingExperience,
-      govtIdProof,
       govtIdNumber,
-      driverPhoto,
       available,
       assignedShift,
-      latitude,
-      longitude,
       otp,
     } = req.body;
 
     // Enhanced validation with specific error messages
     const requiredFields = {
       driverName,
+      otp,
       email,
       password,
       contactNumber,
@@ -51,9 +47,6 @@ const createAmbulanceDriver = async (req, res) => {
       drivingExperience,
       govtIdNumber,
       assignedShift,
-      latitude,
-      longitude,
-      otp,
     };
     console.log(req.body);
 
@@ -98,8 +91,6 @@ const createAmbulanceDriver = async (req, res) => {
       govtIdNumber,
       available: available ?? true,
       assignedShift,
-      latitude,
-      longitude,
     });
 
     await newDriver.save();
@@ -131,12 +122,20 @@ const createAmbulanceDriver = async (req, res) => {
 };
 
 const loginAmbulanceDriver = asyncHandler(async (req, res) => {
-  const { email, password, otp } = req.body;
+  const { email, password, otp, latitude, longitude } = req.body;
 
   try {
     // Input validation
-    if (!email || !password || !otp) {
-      throw new ApiError(400, "Email, password, and OTP are required");
+    if (!email || !password || !otp || !latitude || !longitude) {
+      throw new ApiError(
+        400,
+        "Email, password, OTP, and location coordinates are required"
+      );
+    }
+
+    // Validate coordinates
+    if (!isValidCoordinates(latitude, longitude)) {
+      throw new ApiError(400, "Invalid location coordinates");
     }
 
     // Find driver
@@ -157,6 +156,14 @@ const loginAmbulanceDriver = asyncHandler(async (req, res) => {
 
     // Verify OTP with userType
     await verifyOTPProgrammatically(email, otp, "driver");
+
+    // Update driver's location
+    driver.latitude = parseFloat(latitude);
+    driver.longitude = parseFloat(longitude);
+    await driver.save();
+
+    console.log("\nLocation Update Debug:");
+    console.log("Updated coordinates:", { latitude, longitude });
 
     // Generate tokens
     const { accessToken, refreshToken } =
@@ -185,6 +192,10 @@ const loginAmbulanceDriver = asyncHandler(async (req, res) => {
             driver: loggedInDriver,
             accessToken,
             refreshToken,
+            location: {
+              latitude: driver.latitude,
+              longitude: driver.longitude,
+            },
           },
           "Login successful"
         )
@@ -198,57 +209,20 @@ const loginAmbulanceDriver = asyncHandler(async (req, res) => {
   }
 });
 
-// const loginAmbulanceDriver = asyncHandler(async (req, res) => {
-//   const { email, password, otp } = req.body;
+// Helper function to validate coordinates
+const isValidCoordinates = (latitude, longitude) => {
+  const lat = parseFloat(latitude);
+  const lng = parseFloat(longitude);
 
-//   if (!email || !password || !otp) {
-//     throw new ApiError(400, "Email, password, and OTP are required");
-//   }
-
-//   // Find driver and explicitly select password field
-//   const driver = await AmbulanceDriver.findOne({ email }).select("+password");
-//   if (!driver) {
-//     throw new ApiError(401, "Driver not found");
-//   }
-
-//   console.log("Login attempt for:", email);
-//   console.log("Password received:", password);
-
-//   // Try direct bcrypt compare for debugging
-//   try {
-//     const directCompare = await bcrypt.compare(password, driver.password);
-//     console.log("Direct bcrypt compare result:", directCompare);
-//   } catch (error) {
-//     console.error("Direct compare error:", error);
-//   }
-
-//   const isPasswordValid = await driver.isPasswordCorrect(password);
-//   if (!isPasswordValid) {
-//     throw new ApiError(401, "Invalid credentials");
-//   }
-
-//   await verifyOTPProgrammatically(email, otp);
-
-//   const token = jwt.sign({ userId: driver._id }, process.env.JWT_SECRET, {
-//     expiresIn: "1h",
-//   });
-
-//   return res
-//     .status(200)
-//     .cookie("token", token, { httpOnly: true })
-//     .json(
-//       new ApiResponse(
-//         200,
-//         {
-//           userId: driver.userId,
-//           driverName: driver.driverName,
-//           email: driver.email,
-//           token,
-//         },
-//         "Login successful"
-//       )
-//     );
-// });
+  return (
+    !isNaN(lat) &&
+    !isNaN(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+};
 
 // Get all ambulance drivers
 const getAllAmbulanceDrivers = async (req, res) => {
