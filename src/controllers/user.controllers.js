@@ -115,9 +115,7 @@ const loginUser = asyncHandler(async (req, res) => {
       await generateAccessAndRefreshTokens(user);
 
     // Get user without sensitive data
-    const loggedInUser = await User.findById(user._id).select(
-      "-password -refreshToken"
-    );
+    const loggedInUser = await User.findById(user._id).select("-password");
 
     return res
       .status(200)
