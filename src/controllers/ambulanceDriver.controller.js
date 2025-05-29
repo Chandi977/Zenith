@@ -91,6 +91,8 @@ const createAmbulanceDriver = async (req, res) => {
       govtIdNumber,
       available: available ?? true,
       assignedShift,
+      latitude: req.body.latitude || 0, // Default to 0 if not provided
+      longitude: req.body.longitude || 0, // Default to 0 if not provided
     });
 
     await newDriver.save();
